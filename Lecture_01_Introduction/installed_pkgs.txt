@@ -1,0 +1,5 @@
+knitr
+drc
+morse
+rjags
+BiocManager
