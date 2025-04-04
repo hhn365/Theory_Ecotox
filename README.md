@@ -1,5 +1,5 @@
 # Theory_Ecotox
-Lecture materials for the course Theoretical Ecotoxicology: Concepts and Applications
+Lecture materials for the MSc course Theoretical Ecotoxicology: Concepts and Applications
 
 University Duisburg-Essen, 2025
 
