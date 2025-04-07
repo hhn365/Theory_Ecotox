@@ -3,3 +3,7 @@ drc
 morse
 rjags
 BiocManager
+tidyr
+ggplot2
+rbioacc
+deSolve
