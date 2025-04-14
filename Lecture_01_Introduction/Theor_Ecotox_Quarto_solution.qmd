@@ -1,0 +1,18 @@
+---
+title: "Theor- Ecotox"
+author: "VCS"
+format: html
+editor: visual
+toc: true
+toc-depth: 4
+number-sections: true
+editor_options: 
+  chunk_output_type: console
+---
+
+# Quarto in Theoretical Ecotoxicology
+
+
+$$ sumTU=log_{10} \left( \sum_{i=1}^n \frac{c_i}{EC_{50_i}} \right) \ $$
+
+where $c_i$ is the concentration of the pesticide $i$ and $EC_{50i}$ is the concentration of pesticide $i$ at which 50 % of the test organisms (*Daphnia magna*) were affected.
