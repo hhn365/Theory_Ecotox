@@ -1,0 +1,114 @@
+---
+title: "Ecotoxicological Databases"
+author: "Helena S. Bayat"
+format: html
+editor: visual
+---
+
+## Making sense of data from databases
+
+Since the EPA ECOTOX database is very large and complicated, we are going to start working with a small, cleaned up subset
+
+First, load necessary packages with library()
+
+We will use dplyr()
+
+```{r}
+library(dplyr)
+
+```
+
+Now let us read in some data - for .csv files, we can use base R function read.csv()
+
+```{r}
+ch <- read.csv("chemical_info.csv")
+tox <- read.csv("test_info.csv")
+tax <- read.csv("tax_info.csv")
+
+```
+
+Take a look at the data with head() - shows the beginning of the dataset, useful with large datasets
+
+```{r}
+head(ch)
+head(tax)
+head(tox)
+
+```
+
+### Chemical information
+
+We are interested in two substances for which we have CAS numbers. We put these in a vector, then use this to filter with the filter() function.
+
+The pipe "%\>%" is syntax used with the tidyverse packages, including dplyr, to subset functions
+
+Our original data "ch" is passed along to filter(), where our target CAS numbers are filtered from within the column "cas"
+
+View the result with print()
+
+```{r}
+target_cas <- c("80844-07-1", "78587-05-0")
+chem <- ch %>% filter(cas %in% target_cas)
+print(chem)
+  
+```
+
+Are these substances pesticides?
+
+Before adding toxicity information, we will repeat the code above but select only 4 relevant columns
+
+View the result with print()
+
+```{r}
+chem_trim <- ch %>% filter(cas %in% target_cas) %>%
+ select(casnr, cas, cname, cro_pesticide)
+print(chem_trim)
+
+```
+
+### Adding toxicity information
+
+Toxicity information is contained within the tox dataframe. The column "casnr" is a shared between the two dataframes and can be used as a key to join them
+
+The function merge() performs an inner join, meaning only matches contained in both dataframes will be returned
+
+```{r}
+chemtox <- merge(chem_trim, tox, by = "casnr")
+head(chemtox)
+
+```
+
+How many toxicity test results are available for these two substances?
+
+### Adding taxonomic information
+
+We want to know what species were used in the test. Specifically, we are interested in the genus Daphnia. Taxonomic information for Daphnia is found in the tax dataframe, which shares the "species_number" column with the chemtox dataframe we just created.
+
+We will do an inner join with merge using the "species_number" column
+
+```{r}
+chemtox_daph <- merge(chemtox, tax, by = "species_number")
+print(chemtox_daph)
+
+```
+
+What information do we now have about these two substances and Daphnia?
+
+If we are interested in saving this information for later, we can save the dataframe using write.csv()
+
+The default is to save to the working directory
+
+```{r}
+write.csv(chemtox_daph, "chemtox_daph.csv", row.names = FALSE, na = "")
+
+```
+
+### Optional
+
+Check out the structure of the full EPA ECOTOX database. What terms to you recognize?
+
+<https://pepijn-devries.github.io/ECOTOXr/articles/ecotox-schema.html#ec_results>
+
+## R resource
+
+[R for Data Science](https://r4ds.hadley.nz/)

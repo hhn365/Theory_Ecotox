@@ -1,0 +1,250 @@
+---
+title: "Ecotoxicological Databases Demo"
+author: "Paul Ozoh and Helena Bayat"
+format: html
+editor: visual
+---
+
+# Setup
+
+## Load packages
+
+Use library() to load necessary packages.
+
+readxl - Use to read in data from Excel
+
+dplyr - Use for data cleaning and manipulation, also known as "wrangling" data
+
+httr - Use to connect to websites from within R
+
+ggplot2 - Use for plotting figures and graphics
+
+```{r}
+library(readxl) 
+library(dplyr)
+library(httr)
+library(ggplot2)
+
+```
+
+# Get data
+
+## EU Pesticide Database
+
+Define the URL of a file hosted in the GitHub course
+
+```{r}
+url <- "https://raw.githubusercontent.com/hhn365/Theory_Ecotox/main/Lecture_02_EcotoxDatabase/ActiveSubstanceExport_14-04-2025.xlsx"
+
+```
+
+Download the file to a local directory using GET()
+
+```{r}
+GET(url, write_disk("ActiveSubstanceExport.xlsx", overwrite = TRUE))
+
+```
+
+Read the file into R with read_excel(); the argument "skip" adjusts the header row, since the first row is not the header in the original file
+
+Optional: Use names() to view the column names and get an overview of the data structure
+
+Use head() to view the first section of the data
+
+```{r}
+# Read it into R (adjust 'skip' if header row is not the first)
+df <- read_excel("ActiveSubstanceExport.xlsx", skip = 2)  # adjust skip if needed
+# Optional: View the column names to understand the structure
+names(df)
+head(df)
+
+```
+
+Define the CAS numbers to search
+
+```{r}
+target_cas <- c("25057-89-0", "80844-07-1", "78587-05-0", "173662-97-0")
+
+```
+
+Filter the data for the target CAS numbers
+
+The pipe "%\>%" is syntax used with the tidyverse packages, including dplyr, to subset functions 
+
+Our original data "df" is passed along to filter(), where our target CAS numbers are filtered from within the column "CAS Number"
+
+select() limits the final columns to the ones listed. Quotation marks are not needed for column "Substance" because it is one word without spaces; spaces and special characters have meaning in R and can cause problems in column names, so column names containing these are in quotations
+
+```{r}
+filtered_df <- df %>%
+  filter(`CAS Number` %in% target_cas) %>%
+  select(`CAS Number`, Substance, `Status under Reg. (EC) No 1107/2009`)
+
+```
+
+View our filtered data
+
+```{r}
+print(filtered_df)
+
+```
+
+## EFSA Open FoodTox
+
+Download the Excel file from Zenodo page of EFSA Open FoodTox Download with GET(), read into R with read_excel(), and view the first few rows with head()
+
+```{r}
+url <- "https://zenodo.org/record/5076033/files/ReferencePoints_KJ_2022.xlsx?download=1"
+destfile <- "ReferencePoints_KJ_2022.xlsx"
+GET(url, write_disk(destfile, overwrite = TRUE))
+data <- read_excel(destfile)
+head(data)
+
+```
+
+## Result
+
+Now you have two data frames to work with in the next step - filtered_df from the EU Pesticide Database and data from EFSA Open FoodTox
+
+# Combine the data
+
+The EFSA Food Tox data contains the results of many toxicity tests conducted on a variety of species, with a variety of endpoints
+
+We are interested in the EC50 endpoint of tests conducted with Daphnia magna
+
+We filter for this endpoint and species using filter(), select() gives us only the columns we want to see
+
+```{r}
+tox_data_filtered <- data %>%
+  filter(Species == "Daphnia magna", Endpoint == "EC50") %>%
+  select(Substance, Species, Endpoint, value, unit)
+
+```
+
+We combine our two dataframes with a left_join() which performs a left join (as the name suggests!)
+
+The "Substance" column acts as our key to match with
+
+A left join means that all rows of filtered_df will be kept and all matching rows from tox_data_filtered are added
+
+View the final data frame with print()
+
+```{r}
+combined_df <- filtered_df %>%
+  left_join(tox_data_filtered, by = "Substance")
+print(combined_df)
+
+```
+
+# Risk Assessment
+
+Now we will conduct an example risk assessment for these four substances
+
+## Add Predicted Environmental Concentration and Adjustment Factor
+
+First add PEC (Predicted Environmental Concentration) and AF (Adjustment Factor) values to our data
+
+The PEC values are extracted from EFSA Conclusions specific to each chemical
+
+The AF values are set by EU regulations depending on the type of toxicity test (among other variables)
+
+Create vectors for PEC and AF values
+
+```{r}
+PEC <- c(0.316, 0.00038, 0.009732, 0.0435) 
+AF  <- c(100, 100, 100, 100)
+
+```
+
+Add the vectors to the data frame using base R syntax
+
+The "\$" references a column within our data frame; if a column with that name doesn't already exist within the data frame, a new one is created
+
+The "\<-" indicates what values will fill the new column
+
+Once again use print() to view the result
+
+```{r}
+combined_df$PEC <- PEC
+combined_df$AF <- AF
+print(combined_df)
+
+```
+
+## Calculate Risk Quotient
+
+Recall the risk quotient equation from the lecture slides
+
+mutate() creates a new column with the results of the equation
+
+View the result with print()
+
+```{r}
+combined_df <- combined_df %>%
+  mutate(RQ = (PEC * AF) / value)
+print(combined_df)
+
+```
+
+## Determine Risk
+
+Recall the threshold for risk from the lecture
+
+When the risk quotient is above 1, a substance has risk according to EU law
+
+A risk quotient below 1 means no risk according to EU law
+
+Add a risk label column based on the risk quotient
+
+mutate() used with a condition dictated by ifelse() fills the new RiskLabel column
+
+ifelse() takes a condition as an argument (in this case, RQ \> 1), followed by what is filled in if the condition is true (Risk), then if false (No Risk)
+
+```{r}
+combined_df <- combined_df %>%
+  mutate(RiskLabel = ifelse(RQ > 1, "Risk", "No Risk"))
+
+```
+
+# Plot
+
+## Visualize risk quotient
+
+Create a figure visualizing the risk quotient
+
+ggplot() creates a plot
+
+Different elements are added with a "+"
+
+```{r}
+ggplot(combined_df, aes(x = Substance, y = RQ, fill = RiskLabel)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = round(RQ, 2)), vjust = -0.5, size = 4) +
+  geom_hline(yintercept = 1, linetype = "dashed", linewidth = 1) +  
+  labs(
+    title = "Risk Quotient (RQ) per Substance",
+    x = "Substance",
+    y = "Risk Quotient (RQ)",
+    fill = "Risk Category"
+  ) +
+  theme_minimal()
+
+```
+
+## Plotting resources
+
+The syntax around ggplot graphics can get quite complicated - see the resources below for future plotting needs
+
+[Graphics Cookbook for R](https://r-graphics.org/)
+
+[R Graph Gallery](https://r-graph-gallery.com/)
+
+# Follow up questions
+
+How does the risk quotient and EC50 value for Daphnia magna compare? 
+
+Does the most toxic chemical have the highest risk quotient?
+
+What additional information would you like to have before considering banning the substances?
+
+Where would you look to find this information?
