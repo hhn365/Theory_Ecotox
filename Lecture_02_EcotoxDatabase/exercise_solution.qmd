@@ -1,0 +1,106 @@
+---
+title: "In Class Exercise"
+author: "Paul Ozoh and Helena Bayat"
+format: html
+editor: visual
+---
+
+# Exercise
+
+You are interested in the following substances with CAS Numbers: "1861-40-1", "161326-34-7", "140923-17-7", "78587-05-0", "13684-56-5". Create a dataframe with the following requirements:
+
+## A. From the EU Pesticide database
+
+From the EU Pesticide database file, get the columns
+
+1.  “Substance”
+
+2.  “Status under Reg. (EC) No 1107/2009”
+
+3.  “RMS”
+
+```{r}
+# CAS numbers to look up
+required_cas <- c("1861-40-1", "161326-34-7", "140923-17-7", "78587-05-0", "13684-56-5")
+
+# Filter the dataset and select the columns of interest
+filtered_data <- df %>%
+  filter(`CAS Number` %in% required_cas) %>%
+  select(`CAS Number`, Substance, `Status under Reg. (EC) No 1107/2009`, RMS)
+
+# View the filtered data
+print(filtered_data)
+
+```
+
+### Questions
+
+What are the names of the substances?
+
+What is their status? Are they approved?
+
+What is the RMS (Rapporteur Member State) for each substance?
+
+## B. From the EFSA Open FoodTox database
+
+1.  Filter
+
+“Daphnia magna” from column “Species”
+
+“EC50” from column “Endpoint”
+
+Include columns for “value” and “unit” along with "Species" and "Endpoint"
+
+2.  Perform a left join with the result from Part A. of this exercise
+
+3.  View the result
+
+```{r}
+# Filter the toxicity data for Daphnia magna + NOEC
+tox_data_added <- data %>%
+  filter(Species == "Daphnia magna", Endpoint == "EC50") %>%
+  select(Substance, Species, Endpoint, value, unit)
+
+# Step 2: Join with filtered pesticide data
+combined_data <- filtered_data %>%
+  left_join(tox_data_added, by = "Substance")
+
+# Step 3: View result
+print(combined_data)
+
+```
+
+5.  Filter
+
+“Daphnia magna” from column “Species”
+
+“NOEC” from column “Endpoint”
+
+Include columns for “value” and “unit” along with "Species" and "Endpoint"
+
+2.  Perform a left join with the result from Part A. of this exercise
+
+3.  View the result
+
+```{r}
+# Filter the toxicity data for Daphnia magna + NOEC
+tox_data_added <- data %>%
+  filter(Species == "Daphnia magna", Endpoint == "NOEC") %>%
+  select(Substance, Species, Endpoint, value, unit)
+
+# Step 2: Join with filtered pesticide data
+combined_data <- filtered_data %>%
+  left_join(tox_data_added, by = "Substance")
+
+# Step 3: View result
+print(combined_data)
+
+```
+
+### Questions
+
+Which substance is most toxic to Daphnia magna?
+
+Does the toxicity seem to relate to the approval of the substance or not?
+
+How does the NOEC compare to the EC50?
