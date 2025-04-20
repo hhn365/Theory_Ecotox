@@ -8,3 +8,4 @@ ggplot2
 rbioacc
 deSolve
 fitdistrplus
+ssdtools
