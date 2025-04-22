@@ -1,0 +1,335 @@
+---
+title: "Modelling dose-reponse data in R"
+output: html_notebook
+---
+
+# Introduction
+
+In this session, we will apply dose-response models to four different topics:
+
+1.  Simple dose-response model
+
+2.  Comparison of dose-response models
+
+3.  Species sensitivity distributions
+
+4.  Multiple dose-response models
+
+**Acknowledgement** My R code is loosely based on Ritz et al. (2021), an R Markdown document related to a talk by Christian Ritz 2021 that he kindly shared and [this online course](https://uncsrp.github.io/Data-Analysis-Training-Modules/dose-response-modeling.html#comparing-curve-fits).
+
+# Simple dose-response model
+
+We use data from an experiment where the herbicidal effect of ferulic acid on the root growth of ryegrass was examined at 7 concentration levels, including a control. The dataset contains only two variables: *rootl* and *conc*.
+
+```{r}
+library(drc)
+# R package that contains the data
+data(ryegrass)
+head(ryegrass)
+```
+
+Now we fit the dose-response model using a 4-parameter log-logistic model.
+
+```{r}
+ryegrass.LL.4 <- drm(rootl ~ conc, data = ryegrass, fct = LL.4())
+```
+
+The syntax for fitting the model is the same as for other R functions such as `lm()`. The argument `fct` specifies the type of dose response model, where *LL* stands for the Log-Logistic model. `LL.4()` is the log-logistic model with 4 parameters. `LL.2()` would be the version with two parameters. **Which parameters would this include, and why is this model not suitable for our ryegrass data?**
+
+As with other models in R, we can use the `summary()` function to obtain parameter estimates along with associated *p*-values from *t*-tests. The parameter *e* gives the EC50.
+
+```{r}
+summary(ryegrass.LL.4)
+```
+
+We can also directly extract EC-values using the `ED()` function for desired effect levels. Here, we extract the 10th, 50th (i.e. EC50) and 90th percentiles.
+
+```{r}
+ED(ryegrass.LL.4, c(10, 50, 90))
+```
+
+We plot the model, again using the familiar `plot()` function in R.
+
+```{r, fig.width = 5, fig.height = 5}
+plot(ryegrass.LL.4, broken = TRUE, type = "all",
+xlab = "Ferulic acid (mM)", ylab = "Root length (cm)", lwd = 2)
+```
+
+The fitted curve matches the observations quite well.
+
+However, let us now check the model assumptions. We first evaluate model fit using the Q-Q plot.
+
+```{r, fig.width = 5, fig.height = 5}
+qqnorm(residuals(ryegrass.LL.4))
+abline(a = 0, b = sd(residuals(ryegrass.LL.4)))
+```
+
+The Q-Q plot indicates that the normality assumption for the errors appears reasonable, as the ranked (raw) residuals approximately follow the expected values under a normal distribution.
+
+Next, we check the assumption of variance homogeneity using a residuals vs. fitted values plot.
+
+```{r, fig.width = 5, fig.height = 5}
+plot(fitted(ryegrass.LL.4), residuals(ryegrass.LL.4))
+abline(h = 0, lty = 2)
+```
+
+The residuals vs. fitted values plot indicates that the chosen model function provides an appropriate description of the dose-response data. The residuals are randomly scattered around the reference line, which is the x-axis, given that the residuals should be centered around 0. Moreover, the spread of points appears consistent across the range of fitted values, which represents the range of predicted responses. This supports that the model assumption of variance homogeneity is met.
+
+Finally, we produce a plot using the *ggplot2* package instead of base graphics. I provide the code below, but introducing this plotting system is beyond the scope of this course. However, the beginning of the code also shows how to create confidence intervals through prediction using the fitted model. \*\*Inspect the *newdata* object, what are these values?"
+
+```{r, fig.width = 5, fig.height = 5}
+library(ggplot2)
+newdata <- expand.grid(conc = exp(seq(log(0.5), log(100),
+length = 100)))
+# we wrap the predict function inside a function that suppresses warnings because these are non-informative in our case and would only detract in this notebook. However, the warnings would not affect functionality of the code.
+suppressWarnings(pm <- predict(ryegrass.LL.4, newdata = newdata,
+interval = "confidence"))
+newdata$p <- pm[ , 1]
+newdata$pmin <- pm[ , 2]
+newdata$pmax <- pm[ , 3]
+# given that the log for 0 is not defined, we set the lowest value to 0.5, but create a new concentration vector. This is good practice, never overwrite the raw data!
+ryegrass$conc0 <- ryegrass$conc
+ryegrass$conc0[ryegrass$conc0 == 0] <- 0.5
+
+ggplot(ryegrass, aes(x = conc0, y = rootl)) +
+geom_point() +
+geom_line(data = newdata, aes(x = conc, y=p)) +
+geom_ribbon(data = newdata,
+aes(x = conc, y = p, ymin = pmin, ymax = pmax),
+alpha = 0.2) +
+coord_trans(x = "log") +
+xlab("Ferulic acid (mM)") + ylab("Root length (cm)")
+```
+
+**Now it is up to you!**
+
+1.  Load the *secalonic* dataset using the `data()`. Subsequently, inspect the data using the function `?secalonic`.
+
+2.  Fit a 4-parameter log-logistic model to the data and evaluate the model assumptions.
+
+3.  Extract the EC~10~ and EC~20~ from the model.
+
+# Comparison of dose-response models
+
+Let us now fit different types of dose-response models to the data and compare their fit. We have already fitted a log-logistic model and we will now fit a range of other models: Weibull type 1 model with four parameters (*W1.4*), log-normal model with four parameter (*LN.4*) and a Brain-Cousens model for hormesis with 5 parameters (*BC.5*), though the data do not suggest the presence of hormesis (see Calabrese (2013) for an overview on the concept of hormesis). For an overview of model types and their typical applications see the Appendix B of Ritz et al. (2021).
+
+```{r}
+# fit Weibull type 1 model
+ryegrass.W14 <- drm(rootl ~ conc, data = ryegrass, fct = W1.4())
+# fit log-normal model
+ryegrass.LN4 <- drm(rootl ~ conc, data = ryegrass, fct = LN.4())
+# fit Brain-Cousens model
+ryegrass.BC5 <- drm(rootl ~ conc, data = ryegrass, fct = BC.5())
+```
+
+We plot all models in one figure. This can be done conveniently with the `add = TRUE` argument; the other arguments set the color, line type (`lty`) and line width (`lwd`).
+
+```{r, fig.width = 5, fig.height = 5}
+# Generating the plot
+plot(ryegrass.LL.4, broken = TRUE, type="all")
+# Can add the next models on top of current plot with different line types and weights
+plot(ryegrass.W14, add = TRUE, col = "red", lty = 4, lwd = 1.5, broken = TRUE, type = "none")
+plot(ryegrass.LN4, add = TRUE, col = "blue", lty = 2, lwd = 1.5, broken = TRUE, type = "none")
+plot(ryegrass.BC5, add = TRUE, col = "darkgreen", lty = 6, lwd = 1.5, broken = TRUE, type = "none")
+
+legend("bottomleft", legend = c("LL.4", "W1.4", "LN.4", "BC.5"),
+lty = c(1, 4, 2, 6), lwd = c(1, 2, 2, 2), col = c("black", "red", "blue", "darkgreen"), bty = "n")
+```
+
+The lines look very similar, except for Weibull type 1 model. Indeed, the log-normal and log-logistic model typically produce very similar results. The Brain-Cousens model has an extra parameter that enables it to capture potential hormesis, which is not required here. **Which model would you expect to have the highest AIC?**
+
+We calculate the AICs for the different models.
+
+```{r}
+AIC(ryegrass.LL.4)
+AIC(ryegrass.W14)
+AIC(ryegrass.LN4)
+AIC(ryegrass.BC5)
+```
+
+The log-logistic model has the lowest AIC. However, the differences are minor. Models with a $\Delta$ AIC \< 2 have been suggested to provide a similar fit to the data (Burnham & Anderson 2002), though this is merely a rule-of-thumb. Overall, our exercise does not find major differences between the types of model. **How do you interpret the result that the AIC of the Weibull model is higher than that of the Brain-Cousens model despite having more parameters?**
+
+**Now it is up to you!**
+
+1.  Load and inspect the *lettuce* dataset.
+
+2.  Fit multiple types of models to the data. You are free to choose some models, but make sure to also fit the two Brain-Cousens models (*BC.4* and *BC.5*). Compare the models and also evaluate model assumptions for the Brain-Cousens and other models.
+
+# Species sensitivity distributions
+
+The estimation of species sensitivity distributions (SSD) can also be considered as a special case of a dose-response analysis. While SSDs only fit a single type of dose-response model to the data, the result is visualized by means of a dose-response curve.
+
+We use the *endosulfan* dataset, which consists of acute toxicity data in µg/L of a range of organism groups (i.e. arthropods, fish, amphibians). Note that generally it is more meaningful to fit SSDs to single organism groups, which is why we limit the data to non-Australian arthropods.
+
+```{r}
+library(fitdistrplus) # to retrieve the data
+data("endosulfan")
+head(endosulfan)
+endosulfan.art <- subset(endosulfan, group == "Arthropods" & Australian == "no")
+```
+
+We use the endosulfan data and fit an SSD. Several distributions are commonly used, some of which are identical to those used in the context of dose-response modeling using the *drc* package. For an overview and details of the distributions [see here](https://bcgov.github.io/ssdtools/articles/B_distributions.html). We start by fitting a log-normal model using the `ssd_fit_dists()` function. This model frequently provides an acceptable fit (Iwasaki & Yanagihara 2025). The argument `left` specifies the concentration vector, if it carries the name "Conc", no specification is required. The `right` argument is used for censored data.
+
+```{r}
+# we use the ssdtools package
+library(ssdtools)  
+# we fit the distribution
+ssd_ln <- ssd_fit_dists(data = endosulfan.art, left = "ATV", dist = "lnorm")
+# and create the plot
+ssd_plot_cdf(ssd_ln)
+```
+
+The fit looks reasonably good, but towards the extremes, the observations deviate a bit. This would be irrelevant if the focus is on the center of the distribution (e.g. HC~50~), but can be important if we focus on the margins of the distribution (e.g. HC~5~).
+
+For SSDs we can also check the normality assumption with a Q-Q plot to spot deviations. We need a few lines of code and use the base R function `qqplot`.
+
+```{r, fig.width = 5, fig.height = 5}
+# First we extract and sort the concentrations
+Conc <- sort(endosulfan.art$ATV)  
+# Extract estimated parameters
+params <- ssd_ln$lnorm$pars
+# Assign mean and standard deviation to new object
+# But need to convert to object type numeric
+mlog <- as.numeric(params["meanlog"])
+sdlog <- as.numeric(params["log_sdlog"])
+# Now we determine the theoretical log-normal distribution
+# Note that you would need to adjust this, if you fitted a different distribution
+q_dist <- qnorm(ppoints(length(Conc)), mean = mlog, sd = sdlog)
+
+# Generate Q-Q plot
+qqplot(q_dist, log10(Conc), xlab = "Theoretical quantiles", ylab = "Observed quantiles",
+  main = "QQ-Plot (lognormal fit)")
+# We provide the ordinates for probability plotting with ppoints, the center of the distribution and the variability of the distribution. Note that once we know the center and the variability along with the sample size, we can specify the exact values of a theoretical distribution.
+qqline(log10(Conc), distribution = function(p) qnorm(p, mean = mlog, sd = sdlog), col = "red")
+```
+
+In the Q-Q plot we can more clearly spot the deviations towards the upper end of the distribution. This may not be too dramatic if we determine the HC~5~ from the lower end. Let us extract a Hazard Concentration (HC) now using the `ssd_hc()` function where the argument `proportion` determines the percentage of species affected by the HC.
+
+```{r}
+ssd_hc(ssd_ln, proportion = 0.05)
+# we can also generate bootstrapped confidence intervals for this proportion
+ssd_hc(ssd_ln, proportion = 0.05, ci = TRUE)
+```
+
+A nice feature of the `ssd_fit_dists()` function is that we can fit multiple distributions simultaneously. Let us fit multiple distributions and compare their fit, again using the AIC corrected for small sample size (i.e. corrected AIC (AIC~c~)).
+
+```{r}
+ssd_fitdists <- ssd_fit_dists(data = endosulfan.art, left = "ATV", dist = c("lnorm", "burrIII3", "weibull", "llogis"))
+ssd_plot_cdf(ssd_fitdists)
+```
+
+Visually, the Burr type III distribution provides the best fit to the data. Let us check with the AIC~c~.
+
+```{r}
+ssd_gof(ssd_fitdists)
+```
+
+We focus on the AIC~c~ given by *aicc* in the output. The *delta* gives the difference between the AIC~c~ values. The output also contains several statistical tests that test the match between an empirical and theoretical distribution. However, visual checking has been recommended in textbooks and statistical tests relying on *p*-values are sensitive to sample size. Nevertheless, we see that the model using the log-normal distribution has the lowest AIC~c~ followed by the Burr type III distribution. Still, the Burr type III model seems to fit better at the margins.
+
+Finally, we compute the HC~5~ with confidence intervals for the different distributions. For multiple distributions, we need to set the argument `average = FALSE` , which controls whether model averaging is conducted.
+
+```{r}
+hc_table <- ssd_hc(ssd_fitdists, proportion = 0.05, average = FALSE, ci = TRUE)
+print(hc_table)
+# let us also plot the estimates with the confidence intervals.
+library(ggplot2)
+ggplot(hc_table, aes(x = dist, y = est)) +
+  geom_point(size = 3) +  # Plot estimates
+  geom_errorbar(aes(ymin = lcl, ymax = ucl), width = 0.2) +  # Confidence intervals
+  labs(
+    x = "Distribution",
+    y = "HC5",
+    title = "Estimates with 95% Confidence Intervals"
+  ) +
+  theme_minimal()
+
+
+```
+
+The confidence intervals overlap and the HC~5~ estimates are similar. Hence, in this case the HC~5~ estimates do not differ significantly between the distributions, though they differ by an approximate factor of 2 between log-logistic and Burr type III distributions.
+
+**Now it is up to you!**
+
+Fit an SSD for fish species in the endosulfan dataset and determine the range of HC~5~ for several freely chosen distributions.
+
+# Hierarchical and multiple dose-response models
+
+## Multiple dose-response models
+
+In this final section, we begin by fitting a dose-response model to multiple toxicity tests simultaneously. This approach is particularly useful when the goal is to compare responses across chemicals. The model-fitting procedure is similar to that for a single chemical, but it requires an additional argument `curveid`, which should be a factor identifying the chemical.
+
+We use a dataset in which the potency of two herbicides, glyphosate and bentazone, on white mustard (*Sinapis alba*) was compared. As before, we fit a log-logistic model.
+
+```{r}
+library(drc)
+# Load data set
+data(S.alba)
+# Brief look at the data
+head(S.alba)
+# 
+salba_ll4 <- drm(DryMatter ~ Dose, curveid = Herbicide, data = S.alba, fct = LL.4())
+# Note: If prior information is available regarding the similarity of model parameters such as the upper or lower limit, it can be incorporated using the argument pmodel.
+
+# Display the model results 
+summary(salba_ll4)
+
+```
+
+The parameters *c* and *d*, which correspond to the lower and upper limits, are quite similar for both herbicides. In this case, comparing parameters such as the EC~50~ is meaningful.
+
+Let us plot the curves.
+
+```{r, fig.width = 5, fig.height = 5}
+plot(salba_ll4, broken = TRUE, xlab = "Dose (g a.i./ha)", ylab = "Dry matter (g/pot)")
+```
+
+We observe that bentazone is more toxic than glyphosate, as the same dose results in a stronger reduction in dry matter.
+
+Next, we formally compare the EC~50~ values (i.e. parameter *e*). By specifying the `interval` argument, we obtain confidence intervals for the difference. The `percVec` argument gives the dosage levels for comparison.
+
+```{r}
+EDcomp(salba_ll4, percVec = c(50, 50), interval = "delta")
+```
+
+The estimated difference shows that bentazone is approximately twice as toxic as glyphosate in terms of EC~50~. If the `interval` argument had not been specified, a *p*-value for the hypothesis that both EC~50~s are equal would have been provided instead.
+
+You can also compare specific model parameters using the `compParm` function. For example, let us compare the EC~50~ (*e*) and the slope (*b*) parameters:
+
+```{r}
+compParm(salba_ll4, strVal = "e", operator = "-")
+# the operator determines the comparison type. Here, "-" tests the difference. Use "/" to compare parameter ratios.
+compParm(salba_ll4, strVal = "b", operator = "-")
+```
+
+Glyphosate has a significantly higher EC~50~, while bentazone exhibits a steeper slope, as indicated by a negative estimate. However, the *p*-value for the slope difference is slightly above 0.05.
+
+Overall, this approach allows for a direct comparison of chemical toxicity. It is particularly suitable for acute toxicity tests, where 0 and 1 are the lower and upper survival limits, respectively - making comparisons straightforward.
+
+**Now it is up to you**
+
+Fit a joint two-parameter log-logistic model with the lower and upper limits fixed. The argument `curveid` should be set to the variable *type*. Since the data are binomial, use `dead/total` as the response variable. Alternatively, you can calculate the proportion surviving or dead and use that as the response.\
+Then, compare the EC50 values using the function `ED()` instead of `EDcomp()`.
+
+*For those that want to explore further*:This case study focuses on the toxicity of four types of selenium. To perform pairwise comparisons of their toxicity, you can use the R package *multcomp*. After installing the package, add the argument `multcomp = TRUE` to the `ED()` function and save the resulting object. Pairwise comparisons can then be run using the following R code.
+
+```{r, eval=FALSE}
+# This code will be shown but not executed
+# You need to supply your object before the code works
+library(multcomp)
+summary(glht(<object>[["EDmultcomp"]], linfct = contrMat(1:4, "Tukey")))
+# This performs pairwise comparisons using Tukey's HSD test, which is commonly used as post-hoc test after an ANOVA.
+```
+
+# Outlook
+
+We covered the main topics of dose-response modeling. However, we did not explore hierarchical dose-response models, which incorporate mixed-effects models into the dose-response modeling framework. Such models are needed when the sampling structure is not random. For example, when you have repeated measurements on the same individuals or when individuals are grouped within subunits (e.g. aquaria or cages). If you are working with such data, Ritz et al. (2021) provides an introduction to these models in Chapter 7.
+
+# References
+
+Burnham, K. P., & Anderson, D. R. (2002). Model selection and multimodel inference: A practical information-theoretic approach. Springer.
+
+Calabrese, E. J. (2013). Biphasic dose responses in biology, toxicology and medicine: Accounting for their generalizability and quantitative features. Environmental Pollution, 182, 452–460. <https://doi.org/10.1016/j.envpol.2013.07.046>
+
+Iwasaki, Y., & Yanagihara, M. (2025). Comparison of model-averaging and single-distribution approaches to estimating species sensitivity distributions and hazardous concentrations for 5% of species. Environmental Toxicology and Chemistry, 44(3), 834–840. <https://doi.org/10.1093/etojnl/vgae060>
+
+Ritz, C., Jensen, S. M., Gerhard, D., & Streibig, J. C. (2021). Dose-response analysis using R. CRC Press.
