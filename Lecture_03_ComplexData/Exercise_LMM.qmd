@@ -1,0 +1,216 @@
+---
+title: "Exercise_GLM" 
+author: "Hanh & Verena"
+format: html
+editor: visual
+toc: true
+toc-depth: 4
+number-sections: true
+editor_options: 
+  chunk_output_type: console
+---
+
+# Exercise for lecture 3 - LMM {.unnumbered}
+
+The main reference, from which we also obtained the data and parts of original codes, is:
+
+-   Zuur et al. (2017) Spatial, temporal and spatial-temporal ecological data analysis with R-INLA. Volume I: Using GLM and GLMM
+-   <https:://www.highstat.com>
+
+# Load packages
+
+```{r}
+library(lattice)
+library(ggplot2)
+library(dplyr)
+library(lme4)     # for function lmer() 
+library(nlme)     # for function lme()
+```
+
+# Exercise - Linear mixed effect model
+
+Load data
+
+```{r}
+WS <- read.csv(file = "White_Stork_Growth_20112012_V2.csv", header = TRUE)
+```
+
+Data source within Zuur et al. (2017): Bouriach et al., 2015 Study of factors affecting growth of White Stock (Ciconia ciconia) nestlings in eastern Algeria.
+
+## Data analysis and extract
+
+Data summary
+
+```{r}
+str(WS)
+summary(WS)
+```
+
+Select the 2012 data
+
+```{r}
+WS1 <- subset(WS, Year == 2012)
+```
+
+Remove NA
+
+```{r}
+WS2 <- na.exclude(WS1[, c("Beak", "Age", "Nest", "Chick")])
+```
+
+Factor variables
+
+```{r}
+WS2$fNest  <- factor(WS2$Nest)
+WS2$fChick <- factor(WS2$Chick)
+```
+
+Check frequency of data
+
+```{r}
+table(WS2$fNest)
+table(WS2$fChick)
+```
+
+# Plot growth of beak length (mm) versus chick age (days)
+
+```{r}
+ggplot(data = WS2, aes(x = Age, y = Beak)) +
+  geom_point(shape = 1, size = 1) +
+  labs(x = "Age (days)", y = "Beak length (mm)") +
+  theme(text = element_text(size = 12))
+```
+
+# Models
+
+## Model 1 - Wrong model: fNest as a random effect (ignoring random effects of fChick)
+
+Create same model with two different packages / functions
+
+```{r}
+MM1_lmer <- lmer(Beak ~ Age + (1 | fNest), data = WS2)
+summary(MM1_lmer)
+
+MM1_lme <- lme(Beak ~ Age, random = ~ 1 | fNest, data = WS2)
+summary(MM1_lme)
+```
+
+Validation plots (only for lme)
+
+```{r}
+fit <- fitted(MM1_lme)
+res <- residuals(MM1_lme)
+
+par(mfrow = c(2, 2))
+plot(fit, res, main = "Residuals vs Fitted")
+abline(h = 0, col = "red")
+qqnorm(res)
+qqline(res, col = "red")
+hist(res, breaks = 30, main = "Histogram of Residuals")
+```
+
+### Plot simulated beaker length versus age using MM1_lme model
+
+Prepare data to create the plot, calculate SE
+
+```{r}
+MyData <- data.frame(Age = seq(min(WS2$Age), 
+                          max(WS2$Age),
+                          length = 25))
+X <- model.matrix(~ Age, data = MyData)
+MyData$Pred <- X %*% fixef(MM1_lme)
+MyData$SE <- sqrt(diag(X %*% vcov(MM1_lme) %*% t(X))  )
+MyData$SeUp <- MyData$Pred + 1.96 * MyData$SE
+MyData$SeLo <- MyData$Pred - 1.96 * MyData$SE
+```
+
+Create plot
+
+```{r}
+ggplot() + 
+  geom_point(data = WS2, aes(x = Age, y = Beak), shape = 1, size = 1) +
+  geom_line(data = MyData, aes(x = Age, y = Pred), colour = "black") +
+  geom_ribbon(data = MyData, aes(x = Age, ymin = SeLo, ymax = SeUp), alpha = 0.6) + # add ribbin of SE
+  labs(x = "Age (days)",
+    y = "Beak length (mm)") +
+  theme(text = element_text(size = 12))
+```
+
+### Plot fixed and random effects
+
+Create plot where each line is a nest
+
+```{r}
+WS2$Fit <- fitted(MM1_lme)
+ggplot(WS2, aes(x = Age, y = Beak)) +
+  geom_point(shape = 1, size = 1) +
+  geom_line(aes(y = Fit, group = fNest, color = fNest), show.legend = FALSE) +
+  labs(x = "Age (days)", y = "Beak length (mm)") +
+  theme(text = element_text(size = 12))
+```
+
+## Model 2 - Correct model: Two-way nested model with fNest and fChick
+
+Create model with lmer
+
+```{r}
+MM2_lmer <- lmer(Beak ~ Age + (1 | fNest / fChick), data = WS2)
+summary(MM2_lmer)
+```
+
+Create model with lme, interaction of nest and chick need to be added manually
+
+```{r}
+WS2$fNest_fChick <- interaction(WS2$fNest, WS2$fChick, drop = TRUE)
+MM2_lme <- lme(Beak ~ Age, random = list(fNest = ~1, fNest_fChick = ~1),data = WS2)
+summary(MM2_lme)
+```
+
+Model validation
+
+```{r}
+fit2 <- fitted(MM2_lme)
+res2 <- residuals(MM2_lme)
+
+par(mfrow = c(2, 2))
+plot(fit2, res2, main = "Residuals vs Fitted")
+abline(h = 0, col = "red")
+qqnorm(res2)
+qqline(res2, col = "red")
+hist(res2, breaks = 30, main = "Histogram of Residuals")
+```
+
+Compare models: lower AIC indicates better model fit
+
+```{r}
+AIC(MM1_lmer, MM2_lmer)
+AIC(MM1_lme, MM2_lme)
+```
+
+The second model (with nested factors) is better for both functions
+
+ANOVA
+
+```{r}
+anova(MM1_lme, MM2_lme)
+```
+
+Model MM2_lme is significantly better
+
+Model validation: Left Column (MM1_lme), Right Column (MM2_lme)
+
+```{r}
+par(mfcol = c(3, 2), mar = c(4, 4, 2, 1))  
+
+plot(fit, res, main = "Residuals vs Fitted (MM1_lme)") # MM1_lme
+abline(h = 0, col = "red")
+qqnorm(res, main = "QQ Plot (MM1_lme)")
+qqline(res, col = "red")
+hist(res, breaks = 30, main = "Histogram (MM1_lme)", col = "gray")
+
+plot(fit2, res2, main = "Residuals vs Fitted (MM2_lme)") # MM2_lme
+abline(h = 0, col = "red")
+qqnorm(res2, main = "QQ Plot (MM2_lme)")
+qqline(res2, col = "red")
+hist(res2, breaks = 30, main = "Histogram (MM2_lme)", col = "gray")
+```
