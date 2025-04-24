@@ -32,7 +32,7 @@ library(nlme)     # for function lme()
 Load data
 
 ```{r}
-WS <- read.csv(file = "White_Stork_Growth_20112012_V2.csv", header = TRUE)
+WS <- read.csv(file = "White_Stork_Growth.csv", header = TRUE)
 ```
 
 Data source within Zuur et al. (2017): Bouriach et al., 2015 Study of factors affecting growth of White Stock (Ciconia ciconia) nestlings in eastern Algeria.
