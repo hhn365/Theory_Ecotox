@@ -9,3 +9,7 @@ rbioacc
 deSolve
 fitdistrplus
 ssdtools
+readxl
+dplyr
+httr
+lme4

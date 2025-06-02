@@ -1,6 +1,0 @@
-ggplot2
-dplyr
-lattice
-MASS
-lme4
-nlme
