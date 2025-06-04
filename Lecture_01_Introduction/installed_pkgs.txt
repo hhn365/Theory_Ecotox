@@ -13,3 +13,4 @@ readxl
 dplyr
 httr
 lme4
+simecol
