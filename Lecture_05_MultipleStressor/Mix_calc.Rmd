@@ -1,0 +1,354 @@
+---
+title: "Mixture modelling in R"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Introduction
+
+In this session we compute the mixture toxicity for two typical cases:
+
+1.  We have toxicity data from laboratory toxicity tests and want to predict the joint effect.
+
+2.  We have field data with chemical concentrations and want to predict a joint effect.
+
+## 1. Computing mixture toxicity for lab test data with dose-response information
+
+We will use data that comes with the R package `mixtox`. This contains toxicity information on the antibiotics neomycin sulfate (NEO), streptomycin sulfate (STR), kanamycin sulfate (KAN), spectinomycin dihydrochloridehydrate (SPE), paromomycin sulfate (PAR), dihydrostreptomycin sesquisulfate hydrate (DIH) and gentamycin sulfate (GEN).
+
+```{r}
+library(mixtox)
+data(antibiotox)
+```
+
+You can access data for individual antibiotics using the acronym in the brackets above. For example, we express the data for NEO:
+
+```{r}
+antibiotox$PAR
+```
+
+In the output, *x* provides the concentrations in mol/L and *y* response information from effects on photobacteria in a microplate. Let us visualise the data. To do this, we first extract the concentration and response values into new objects.
+
+```{r}
+conc <- antibiotox$PAR$x
+effect_par <- antibiotox$PAR$y
+```
+
+Subsequently, we use a function of the package to fit a dose-response model and then plot the result. For fitting, we have multiple options for model type and choose the Logit model, which we set with the argument `eq = 'Logit'`. Furthermore, we need to provide starting parameters for model fitting, with the argument `param` and a numeric vector for the calculation of effect concentrations such as the EC50, which would correspond to a value of 0.5. See the help of the function for further information.
+
+```{r}
+par_fit <- curveFit(x = conc, rspn = effect_par, eq ='Logit', param = c(26, 4), effv = c(0.05, 0.5))
+# plot model 
+figPlot(par_fit, xlabel = "log concentration (mol/L)")
+```
+
+The figure shows the observations (black dots) with the fitted dose response curve (black line), the confidence interval (red line) and the prediction interval (blue line).
+
+The effect concentrations are:
+
+```{r}
+par_fit$ecx
+```
+
+The dataset object *antibiotox* already contains fitted curves for all compounds. We can use these to calculate different mixture toxicity models. *antibiotox\$sgl* provides information on the fitted model type and the related parameters.
+
+```{r}
+antibiotox$sgl
+
+# for PAR the parameters are the same as in the object we just fitted
+par_fit$fitInfo
+```
+
+We first calculate the predicted mixture for the Concentration Addition (CA) approach. The function `caPred()` has an argument `mixType`, where you need to provide the design of the mixture. This can be an arbitrary concentration ratio (*acr*), equal effect concentration ratio (*eecr*, e.g. all components at their EC10) or concentrations following the so-called uniform design concentration ratio, which is explained [here](https://journal.r-project.org/articles/RJ-2016-056/). Note the relationship of the *eecr* approach to the Toxic Unit (TU) approach. However, the eecr uses an effect benchmark to quantify a test concentration, whereas the TU approach standardizes a field concentration by an effect benchmark. We illustrate the prediction for the case of the equal effect concentration ratio, where all components are at their EC50. For this, you need to provide the model types and parameters for the individual chemicals as well as the design of the mixture as explained above. The argument `effv` provides the effect level for the equal effect concentration. We use the EC50, which translates into a value of 0.5, i.e. `effv = 0.5`. You could also provide multiple ECx values. Note that unless all dose-response curves exhibit the identical shape in terms of steepness, the mixture effects may vary with the effect level. The package has been designed to be compatible with the `drc` package that we used in the lecture on dose-response modelling. If you are interested in how to connect both packages, see the *Example 3* [here](https://journal.r-project.org/articles/RJ-2016-056/).
+
+```{r}
+# extract model type from the pre-fitted models
+model <- antibiotox$sgl$model
+
+# extract model parameters from the pre-fitted models
+param <- antibiotox$sgl$param
+
+# prediction with CA
+eeca <- caPred(model, param, mixType = "eecr", effv = 0.5)
+
+# inspect resulting object
+eeca
+```
+
+The resulting object contains the predicted effect concentrations *ca* for the full dose-response curve when the components are at their EC50-ratios. These are given in the list *pct*.
+
+We can also predict via the Independent Action (IA) model.
+
+```{r}
+# prediction with IA
+eeia <- iaPred(model, param, mixType = "eecr", effv = c(0.5))
+
+# inspect resulting object
+eeia
+```
+
+The dataset also contains measurements of the mixture *antibiotox\$ee50*, which we can confront with the data. A dose-response model has already been fitted and is provided (*antibiotox\$eecr.mix*), which we use to calculate the EC50 with the function `ECx()`.
+
+```{r}
+mix_model <- antibiotox$eecr.mix$model[2]
+mix_para <- antibiotox$eecr.mix$param[2, ]
+
+# calculation of the EC50
+# we wrap with the unname function to remove naming information
+EC50_meas <- unname(ECx(mix_model, mix_para, effv = c(0.50)))
+```
+
+Let us finally compare the predictions to the empirical result in a plot.
+
+```{r}
+par(mar = c(3, 4, 1, 1), cex = 1.7, las = 1)
+# create vector with values
+mix_vals <- log10(c(EC50_meas, eeia$ia[ , "EC50"], eeca$ca[ , "EC50"])) 
+# need (arbitrary) x values
+x_vals <- rep(1,3)
+plot(x_vals, mix_vals, xlim = c(0.75, 1.25), 
+    xaxt = "n", xlab = "", ylim = c(-6, -5),
+     ylab = "Log concentration (mol/L)", col = c("red", "blue", "orange"), pch = c(15, 17, 19))
+axis(1, at = 1, labels = "EC50")
+# add legend
+legend("topright", legend = c("Measured", "IA", "CA"), col = c("red", "blue", "orange"), pch = c(15, 17, 19))
+```
+
+The CA approach exhibits a better fit than IA. When we compute Model Deviation Ratios (MDRs), both MDRs are within the classical boundaries of 0.5 and 2.
+
+```{r}
+# MDR CA
+eeca$ca[ , "EC50"]/EC50_meas
+# MDR IA
+eeia$ia[ , "EC50"]/EC50_meas
+```
+
+**Now it is up to you**
+
+1.  Do the MDRs differ, when you calculate the mixture toxicity for the effect level EC5 for the equal effect concentration? Note that you also need to adjust the measured mixture effects accordingly.
+
+2.  Calculate mixture predictions for four heavy metals and four ionic liquids that are provided in the dataset *cytotox*. As for the other dataset, you find fitted dose-response curves for the individual chemicals in the sublist *cytotox*\sgl\* and for the measured mixture effects in cytotox\eecr.mix\*.
+
+```{r}
+data("cytotox")
+?cytotox
+```
+
+## 2. Computing mixture toxicity for field data without associated toxicity data
+
+We calculate the CA for one sampling site where 4 out of 10 target pesticides were detected. We also calculate the SSDs to derive the HC5 and the Response Addition (RA, equivalent to IA) model. This example is a strongly simplified version of a study comparing multiple exposure indicators. The original script for approximately hundred sampling sites and hundred of organic toxicants is available [here](http://pubs.acs.org/doi/suppl/10.1021/es4014954) and [here](http://tinyurl.com/ndqe8xx).
+
+First we load and inspect the data. The Rdata object contains three objects: *MOA*, *field_dat* and *toxdat*. *MOA* contains information on the mode of action of the chemicals, which is required to decide on the null model. Similar and dissimilar MOAs suggest to use CA and IA, respectively. *field_dat* contains information on the results of the chemical analysis for the given sampling site. *toxdat* contains information on single species toxicity tests.
+
+```{r}
+setwd("/Users/ralfs/Arbeit/Lehre_Betreuung/2025/Theoretical_ecotox/Lecture_5")
+
+load('Data.Rdata')
+
+# Inspect data sets
+# mode of action of compounds
+head(MOA)
+
+# field observations
+head(field_dat)
+
+# toxicity data 
+head(toxdat)
+```
+
+We log transform the toxicity data, because we assume that a log normal model gives a reasonable fit for a SSD.
+
+```{r}
+toxdat$log_conc <- log10(toxdat$ConcentrationUgLMedian)
+```
+
+The data contains multiple results per combination of chemical and test organism.
+
+```{r, echo = TRUE}
+library(dplyr)
+# Check for multiple compound-species combinations
+toxdat %>%
+  # Count occurrences per compound-species combination
+  group_by(TestCAS, LATINNAME) %>%
+  summarise(frequency = n(), .groups = "drop")
+```
+
+We have several cases with multiple test results per pair of chemical - test organism. We create a new variable *comb_st* and then aggregate per pair of chemical - test organism using the mean. Note that we have log transformed the EC50, which means that we compute the geometric mean.
+
+```{r, echo = TRUE}
+toxdat <- toxdat %>%
+  # Create compound-species combination
+  mutate(comb_st = factor(paste0(TestCAS, ",", LATINNAME)))
+
+tox_aggreg <- toxdat %>%
+  group_by(comb_st) %>%
+  # Calculate mean log EC50
+  summarise(mean_logEC50 = mean(log_conc, na.rm = TRUE)) 
+
+# We merge this with the original compound information
+tox_aggreg_2   <-  tox_aggreg %>%
+       inner_join(
+       toxdat %>%
+       distinct(TestCAS, PesticideName, LATINNAME, comb_st),
+       by = join_by(comb_st)
+      )
+```
+
+After this pre-processing, we can calculate Toxic Units (TU) for the different chemicals. We calculate the TUs for *Daphnia magna*, which is a frequently tested species considered representative for toxicity towards aquatic invertebrates.
+
+```{r, echo = TRUE}
+# Subsetting to data for Daphnia magna
+daph_tox <- tox_aggreg_2 %>% 
+            filter(LATINNAME == "Daphnia magna")
+
+# Merge tox and field data, limited to concentration above the DL
+TU_1 <- merge(daph_tox, field_dat[field_dat$operator == "=", ], by.x = "TestCAS", by.y = "CAS")
+
+# Compute TU for each chemical in the given site
+# Note that we need to consider the log-transformation
+TU_1$ToxUnit  <- TU_1$Conc/ 10^TU_1$mean_logEC50
+
+# Now we can calculate the sumTU assuming the concept of Concentration addition
+sum(TU_1$ToxUnit)
+# Typically expressed as log
+log10(sum(TU_1$ToxUnit))
+```
+
+We obtain a sumTU of `r round(log10(sum(TU_1$ToxUnit)), 2)`, which is above field-derived effect thresholds for invertebrate communities in streams (Liess et al. 2021 *Water Research* 201).
+
+Next we calculate the sumTU for the HC5 of SSDs. This requires the calculation of SSDs as a first step. Note that the calculation of SSDs is only meaningful if multiple data points, i.e. tested species, are available. Let us check this. 
+```{r, echo = TRUE}
+# Check for multiple compound-species combinations
+tox_aggreg_2 %>%
+  # Count occurrences per compound-species combination
+  group_by(TestCAS, PesticideName) %>%
+  summarise(frequency = n(), .groups = "drop")
+```
+We have 24 and 14 different test species for carbofuran and alachlor, but only 1 for pirimicarb and acetochlor. Hence, we will limit the calculation of SSDs to the first two, using the condition of the related article, which required at least 6 different species for the calculation of a SSD.
+
+```{r, echo = TRUE}
+tox_filtered <- tox_aggreg_2 %>%
+  semi_join(
+    tox_aggreg_2 %>%
+      group_by(TestCAS) %>%
+      summarise(frequency = n(), .groups = "drop") %>%
+      filter(frequency > 5),
+    by = "TestCAS"
+  )
+```
+
+We assume a log normal distribution of the data, which makes the computation quite convenient in the case of large data sets (this is not the case here, but the code was developed for > 100 compounds). In this case, the midpoint of the SSD, i.e. the HC50, is equivalent to the mean of the data. We calculate the midpoint for all compounds.
+```{r, echo = TRUE}
+tox_ssd_1 <- tox_aggreg_2 %>% 
+             group_by(TestCAS) %>%
+             summarise(ssd_mid = mean(mean_logEC50), .groups = "drop")
+```
+
+To evaluate the slope of the dose-response relationship, we can use the standard deviation. A low and high standard deviation is related to a steep and shallow slope. Before the calculation of the standard deviation, we center the data by the mean. This allows us to interpret the slopes independently of the mean. It makes the slope represent the change in response per standard deviation, not just per unit of the original scale.
+```{r, echo = TRUE}
+mean_all <- mean(tox_filtered$mean_logEC50)
+# center = substract overall mean
+tox_filtered$Center_logEC50 <- tox_filtered$mean_logEC50 - mean_all
+```
+
+Now we can compute the standard deviation for each compound-species combination where at least 6 data points are available. 
+```{r, echo = TRUE}
+tox_ssd_2 <- tox_filtered %>% 
+             group_by(TestCAS) %>%
+             summarise(ssd_slope = sd(Center_logEC50), .groups = "drop")
+```
+
+Obviously, we now lack two slopes. Let us check the MOAs of the compounds.
+```{r, echo = TRUE}
+MOA[MOA$CAS %in% tox_aggreg_2$TestCAS, ]
+```
+We are lucky! The two missing slopes belong to compounds that have the same MOA as the compounds for which we have slopes. We assume that the slopes of the SSDs can be approximated from that of compound(s) with the same MOA. Hence, we fill the missing slope data accordingly.
+```{r, echo = TRUE}
+ssd_fin <- tox_ssd_1 %>%
+  left_join(tox_ssd_2, by = "TestCAS")
+ssd_fin
+
+# replace NAs with slopes from compound with same MOA
+ssd_fin$ssd_slope[3] <- ssd_fin$ssd_slope[1]
+ssd_fin$ssd_slope[4] <- ssd_fin$ssd_slope[2]
+```
+We compute the HC5, which is the 5th percentile. We have assumed a log-normal distribution, therefore we can use a function to determine quantiles of the normal distribution using the log-transformed slope as input data. 
+
+```{r, echo = TRUE}
+ ssd_fin  <-  ssd_fin %>%
+              mutate(log_HC5 = ssd_mid + qnorm(0.05, mean = 0, sd = ssd_slope))
+```
+We now merge the data with the field data and can calculate the sumTU for the HC5.
+```{r, echo = TRUE}
+TU_2 <- merge(ssd_fin, field_dat[field_dat$operator == "=", ], by.x = "TestCAS", by.y = "CAS")
+
+# calculate TU
+TU_2 <- TU_2 %>%
+     mutate(TU_HC5 = Conc / 10^log_HC5)
+
+# calculate the sumTU
+sum(TU_2$TU_HC5)
+```
+Thus, the field concentrations reach a level of roughly 30% of the HC5, assuming CA to aggregate the exposure to different compounds. 
+
+Finally, let us calculate the RA model. Admittedly, this is not particularly meaningful in this case of just a few compounds, but it serves the purpose of illustration.
+We compute the RA for the HC50, because this is a more robust proxy than the HC5. Thus, we start by calculating the TU_HC50.
+```{r, echo = TRUE}
+# calculate TU
+TU_2 <- TU_2 %>%
+     mutate(TU_HC50 = Conc / 10^ssd_mid)
+```
+
+Now we compute the sumTU per MOA. As a first step, we merge the MOA data to our dataset.
+```{r, echo = TRUE}
+# append MOA 
+TU_2 <- TU_2 %>%
+  left_join(MOA, by = c("TestCAS" = "CAS"))
+```
+In the related study, we used highly aggregated MOAs, because we could only calculate SSDs for a very limited number of compounds. These aggregated MOAs are given by the variable *MOAfinal*. We use this to calculate the sumTU.
+
+```{r, echo = TRUE}
+TU_3 <- TU_2 %>% 
+             group_by(MOAfinal) %>%
+             summarise(sumTU_HC50 = sum(TU_HC50), .groups = "drop")
+```
+
+The elegance of the SSD approach is that we can directly estimate a Potentially Affected Fraction (PAF). We compute the multi-substance PAF (msPAF) per MoA.
+
+```{r, echo = TRUE}
+# we add the SSD slope
+TU_4  <-   TU_3 %>% 
+    left_join(
+    TU_2 %>% 
+      select(MOAfinal, ssd_slope) %>%
+      distinct(),
+    by = "MOAfinal")
+
+# now we use the pnorm function, which provides the cumulative probability, 
+# which in our case is equivalent to the msPAF
+
+TU_4  <-  TU_4 %>%
+              mutate(msPAF = pnorm(log10(sumTU_HC50), mean = 0, sd = ssd_slope))
+
+##
+TU_4
+```
+
+We can see that the narcotic substances have practically zero effect (the msPAF is quasi 0). As a final step, we compute the RA, where the formula is: $msPAF_{RA} = 1 - \prod_{i=1}^n msPAF_i$.
+
+```{r, echo = TRUE}
+msPAF_RA <- 1-((1-TU_4$msPAF[1])*(1-TU_4$msPAF[2]))
+attr(msPAF_RA, "names") <- "msPAF_RA"
+msPAF_RA
+
+```
+
+Thus, we estimate that approximately 2% of species would be affected.
+
+**Now it is up to you**
+
+Load the data for the Exercise *Exercise.RData*. The object contains new field data (*field_dat2*) and more comprehensive toxicity data (*tox_dat_4*). Use these data (together with the other files where needed) and compute the sumTU *Daphnia magna* for this site as well as the sumTU HC5. Also consider calculating the msPAF RA if you want to boost your skills. You could also calculate the TU for the most sensitive species, how would you do this?
+
+
+
