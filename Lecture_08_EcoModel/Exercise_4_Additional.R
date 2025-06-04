@@ -1,6 +1,6 @@
 # References: Codes are adapted from: 
 # 1. Stevens 2009 - A Primer of Ecology with R
-# 2. Course - Introduction to theoretical ecology (https://pojuke.github.io/TheoreticalEcologyPJK/week-8---lotka-volterra-competition-model---population-dynamics.html)
+# 2. Introduction to theoretical ecology (https://pojuke.github.io/TheoreticalEcologyPJK/week-8---lotka-volterra-competition-model---population-dynamics.html)
 
 ########################
 # Load library
@@ -145,4 +145,4 @@ eigStable <- eigen(J2); eigStable[["values"]]
 
 phase_plane(r1 = r1, r2 = r2, a11 = a11, a21 = a21,
             a22 = a22, a12 = a12, t = 0.2,
-            title = "Phase Plane - Stable coexistence")
+            title = "Phase Plane - Competitive exclusion")
