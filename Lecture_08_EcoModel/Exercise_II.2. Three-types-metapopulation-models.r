@@ -54,24 +54,6 @@ head(out.L) # read results
 head(out.G)
 head(out.H)
 
-#############
-# Model plots - Three individual graphs
-par(mfrow = c(3, 1), mar = c(4, 4, 2, 1))
-
-plot(out.L[,1], out.L[,2], type = "l",col = "blue", lwd = 2,                    
-     ylim = c(0, 1), xlab = "time t", ylab = "proportion of patches p", main = "Levins model")
-text(35, 0.60, labels = bquote(frac(dp, dt) == c[i]*p*(1 - p) - ep))
-
-plot(out.G[,1], out.G[,2], type = "l",col = "darkgreen", lwd = 2,                    
-     ylim = c(0, 1), xlab = "time t", ylab = "proportion of patches p", main = "Propagule rain model")
-text(35, 0.60, labels = bquote(frac(dp, dt) == c[e]*(1 - p) - ep))
-
-plot(out.H[,1], out.H[,2], type = "l",col = "orange", lwd = 2,                    
-     ylim = c(0, 1), xlab = "time t", ylab = "proportion of patches p", main = "Core-satellite model")
-text(35, 0.60, labels = bquote(frac(dp, dt) == c[i]*p*(1 - p) - ep(1-p)))
-
-par(mfrow = c(1, 1))
-
 #####################
 # Model plots - Joint graph
 plot(out.L[,1], out.L[,2], 
