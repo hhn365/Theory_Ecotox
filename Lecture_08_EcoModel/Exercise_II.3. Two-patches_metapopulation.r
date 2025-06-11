@@ -92,19 +92,3 @@ lines(result_tpdp@out[,"time"], result_tpdp@out[,"n2"], col = "orange", lwd = 2)
 lines(result_tpdp2@out[,"time"], result_tpdp2@out[,"n1"], col = "lightblue", lty=2, lwd = 2)
 lines(result_tpdp2@out[,"time"], result_tpdp2@out[,"n2"], col = "red", lwd = 2)
 legend(40,220, legend = c("N1", "N1 - no dispersal", "N2", "N2 - no dispersal"), col = c("blue","lightblue", "orange", "red"), lwd = 2)
-
-# To move legends outside (create larger margin for plot frame + specify legend position)
-par(mar = c(5, 4, 4, 10), xpd = TRUE)
-plot(result_tpdp@out[,"time"], result_tpdp@out[,"n1"], 
-     type = "l", col = "blue", lty=2, lwd = 2,
-     xlab = "Time", ylab = "N1 and N2",
-     #ylim = range(result_tpdp2@out[,c("n1", "n2")]),
-     ylim = c(0, 100),
-     main = "Two-patch model: e = 0.2")
-lines(result_tpdp@out[,"time"], result_tpdp@out[,"n2"], col = "orange", lwd = 2)
-lines(result_tpdp2@out[,"time"], result_tpdp2@out[,"n1"], col = "lightblue", lty=2, lwd = 2)
-lines(result_tpdp2@out[,"time"], result_tpdp2@out[,"n2"], col = "red", lwd = 2)
-legend(x = max(result_tpdp@out[,"time"]) + 10, y = 80, 
-       legend = c("N1", "N1 - no dispersal", "N2", "N2 - no dispersal"), 
-       col = c("blue","lightblue", "orange", "red"), 
-       xpd = TRUE, lwd = 2)
