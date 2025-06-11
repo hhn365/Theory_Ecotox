@@ -51,9 +51,9 @@ span1 <- span.graph(rl=rland1, span=100, par1="none")
 
 # Model parameters
 param1 <- create.parameter.df(alpha=0.003,  # inverse dispersal distance
-                              x=0.5,        # Scaling exponent of extinction-area 
-                              y=2,          # Scaling component for colonization probability         
-                              e=0.01)       # Global extinction probability of all patches
+                              x=0.5,        # Scaling exponent of extinction-area (larger x will decrease extinction risk as patch size increase)
+                              y=2,          # Scaling component for colonization probability          
+                              e=0.01)       # Global extinction probability of all patches (increase e will increase extinction in all patches)
 
 # Model simulation
 sim1 <- simulate_graph(rl=spec1,
