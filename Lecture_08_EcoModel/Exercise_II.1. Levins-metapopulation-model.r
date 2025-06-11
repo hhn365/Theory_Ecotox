@@ -39,4 +39,4 @@ text(35, 0.60, labels = bquote(frac(dp, dt) == cp*(1 - p) - ep))
 p_star_L <- 1- parms[2]/parms[1]
 
 ## Q2. Compare Levins model with population density-dependent growth model
-# Solution: in the lecture presentation (slide 11)
+# Solution: in the lecture presentation (slide 12)
