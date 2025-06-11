@@ -14,3 +14,7 @@ dplyr
 httr
 lme4
 simecol
+DHARMa
+marginaleffects
+glmmTMB
+car
