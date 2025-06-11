@@ -1,0 +1,65 @@
+Mesocosm,Salinity,Sediment,Flow,Baetidae,Heptageniidae
+1,salt,sediment,normal flow,5,14
+2,no salt,sediment,reduced flow,9,11
+3,no salt,no sediment,reduced flow,14,32
+4,salt,sediment,normal flow,6,20
+5,no salt,no sediment,normal flow,10,37
+6,salt,no sediment,normal flow,20,58
+7,salt,no sediment,reduced flow,13,52
+8,no salt,no sediment,reduced flow,14,20
+9,no salt,sediment,normal flow,9,22
+10,salt,sediment,reduced flow,3,6
+11,salt,sediment,reduced flow,6,12
+12,no salt,sediment,reduced flow,10,11
+13,salt,no sediment,reduced flow,7,19
+14,no salt,no sediment,normal flow,16,30
+15,no salt,sediment,normal flow,9,23
+16,salt,no sediment,normal flow,23,56
+17,no salt,no sediment,reduced flow,25,47
+18,no salt,no sediment,reduced flow,24,77
+19,salt,no sediment,normal flow,16,53
+20,salt,sediment,normal flow,17,38
+21,no salt,sediment,normal flow,15,39
+22,salt,sediment,normal flow,16,56
+23,salt,no sediment,reduced flow,12,53
+24,no salt,sediment,reduced flow,10,9
+25,salt,no sediment,normal flow,16,45
+26,salt,sediment,reduced flow,5,5
+27,no salt,sediment,normal flow,13,42
+28,no salt,no sediment,normal flow,17,53
+29,salt,sediment,reduced flow,11,32
+30,no salt,sediment,reduced flow,13,21
+31,no salt,no sediment,normal flow,30,47
+32,salt,no sediment,reduced flow,6,41
+33,salt,no sediment,normal flow,36,44
+34,salt,no sediment,reduced flow,17,54
+35,no salt,sediment,normal flow,6,23
+36,no salt,sediment,reduced flow,9,12
+37,salt,no sediment,reduced flow,6,29
+38,no salt,sediment,reduced flow,10,30
+39,salt,sediment,reduced flow,4,11
+40,no salt,no sediment,reduced flow,13,33
+41,no salt,no sediment,reduced flow,26,45
+42,no salt,no sediment,normal flow,28,52
+43,salt,sediment,normal flow,13,22
+44,salt,sediment,reduced flow,8,24
+45,no salt,no sediment,normal flow,21,48
+46,salt,sediment,normal flow,4,32
+47,no salt,sediment,normal flow,21,37
+48,salt,no sediment,normal flow,12,50
+49,salt,sediment,reduced flow,4,15
+50,salt,no sediment,normal flow,9,46
+51,no salt,no sediment,normal flow,23,41
+52,no salt,sediment,normal flow,10,32
+53,salt,no sediment,reduced flow,11,27
+54,salt,no sediment,reduced flow,4,45
+55,no salt,no sediment,reduced flow,11,39
+56,no salt,sediment,reduced flow,6,22
+57,no salt,no sediment,reduced flow,12,34
+58,no salt,sediment,reduced flow,8,12
+59,salt,sediment,reduced flow,12,12
+60,salt,sediment,normal flow,8,26
+61,no salt,no sediment,normal flow,24,53
+62,no salt,sediment,normal flow,11,42
+63,salt,no sediment,normal flow,19,44
+64,salt,sediment,normal flow,10,47
