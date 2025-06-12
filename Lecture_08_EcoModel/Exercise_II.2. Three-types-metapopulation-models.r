@@ -72,10 +72,15 @@ text(24, 0.6, labels = expression("Core-satellite: " ~ frac(dp, dt) == c[i]*p*(1
 #####################
 ## Determine equilibrium conditions of each model (dp/dt =0)
 # Levins: dp/dt = ci * p * (1 - p) - e * p
-(p_star_L <- 1- e/ci)
+(p_star_L1 <- 0)
+(p_star_L2 <- 1- e/ci)
+
 # Propagule rain: dp/dt = ce * (1 - p) - e * p
-(p_star_P <- ce/(ce + e))
+(p_star_P1 <- 0)
+(p_star_P2 <- ce/(ce + e))
+
 # Core-satellite: dp/dt = ci * p * (1 - p) - e * p * (1 - p)
-(p_star_H1 <- 1)
-(p_star_H2 <- 0)
+(p_star_H1 <- 0)
+(p_star_H2 <- 1)
+
 
