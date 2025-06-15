@@ -8,3 +8,5 @@ pkgs <- readLines(file("https://raw.githubusercontent.com/hhn365/Theory_Ecotox/r
 str(pkgs)
 install.packages(pkgs)
 BiocManager::install("DESeq2")
+install.packages("remotes")
+remotes::install_github('andschar/standartox')
