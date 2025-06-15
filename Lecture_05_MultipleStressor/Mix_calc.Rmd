@@ -142,7 +142,7 @@ We calculate the CA for one sampling site where 4 out of 10 target pesticides we
 First we load and inspect the data. The Rdata object contains three objects: *MOA*, *field_dat* and *toxdat*. *MOA* contains information on the mode of action of the chemicals, which is required to decide on the null model. Similar and dissimilar MOAs suggest to use CA and IA, respectively. *field_dat* contains information on the results of the chemical analysis for the given sampling site. *toxdat* contains information on single species toxicity tests.
 
 ```{r}
-setwd("/Users/ralfs/Arbeit/Lehre_Betreuung/2025/Theoretical_ecotox/Lecture_5")
+setwd("/Users/ralfs/Arbeit/Lehre_Betreuung/2025/Theoretical_ecotox/Lecture_5_6")
 
 load('Data.Rdata')
 
@@ -349,6 +349,47 @@ Thus, we estimate that approximately 2% of species would be affected.
 **Now it is up to you**
 
 Load the data for the Exercise *Exercise.RData*. The object contains new field data (*field_dat2*) and more comprehensive toxicity data (*tox_dat_4*). Use these data (together with the other files where needed) and compute the sumTU *Daphnia magna* for this site as well as the sumTU HC5. Also consider calculating the msPAF RA if you want to boost your skills. You could also calculate the TU for the most sensitive species, how would you do this?
+
+**Advanced exercise**
+
+The R package `standartox` (Scharmueller et al. 2020 https://doi.org/10.3390/data5020046) provides standardised and quality-controlled toxicity data based on the EPA data set that we used above. Instead of using the dataset provided with the exercise, we can query data interactively from standartox. 
+First, we load the package and download the latest version of the database. Make sure you have the package installed, if not, execute the related rows from the installation script of this course (note that standartox is not on CRAN, but on github and therefore also requires installation of the package `remotes`).
+```{r, echo = TRUE}
+library(standartox)
+
+dat = stx_data()
+tax = stx_taxa()
+che = stx_chem()
+# merge data sets
+dat2 = merge(dat, tax, by = 'tl_id', all.x = TRUE)
+dat3 = merge(dat2, che, by = 'cl_id', all.x = TRUE)
+# pre-processing according to the github code
+```
+
+This contains all toxicity information for all organism groups, let use get a brief overview.
+```{r, echo = TRUE}
+table(dat2$group)
+table(dat2$habitat)
+```
+
+We limit the data to freshwater invertebrates and choose mortality as effect and EC50 or LC50 as endpoint.
+```{r, echo = TRUE}
+dat4 <- dat3[habitat == "fresh" & group == "invertebrate" & effect == "mortality" & (endpoint == "EC50" | endpoint == "LC50"), ] 
+```
+
+Let us check the test durations.
+```{r, echo = TRUE}
+summary(dat4$duration)
+```
+
+We limit to 24 h to 120 h test duration.
+```{r, echo = TRUE}
+final_dat <- dat4 %>% filter(between(duration, 24, 120))
+```
+
+Now the data ist ready for use, you can query informtion by CAS number, i.e. variable *casnr*. Note that you would need to justify each step in a scientific analysis, for the sake of this exercise we keep it brief.
+
+
 
 
 
