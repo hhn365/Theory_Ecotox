@@ -22,7 +22,7 @@ library(mixtox)
 data(antibiotox)
 ```
 
-You can access data for individual antibiotics using the acronym in the brackets above. For example, we express the data for NEO:
+You can access data for individual antibiotics using the acronym in the brackets above. For example, we express the data for PAR:
 
 ```{r}
 antibiotox$PAR
@@ -128,7 +128,7 @@ eeia$ia[ , "EC50"]/EC50_meas
 
 1.  Do the MDRs differ, when you calculate the mixture toxicity for the effect level EC5 for the equal effect concentration? Note that you also need to adjust the measured mixture effects accordingly.
 
-2.  Calculate mixture predictions for four heavy metals and four ionic liquids that are provided in the dataset *cytotox*. As for the other dataset, you find fitted dose-response curves for the individual chemicals in the sublist *cytotox*\sgl\* and for the measured mixture effects in cytotox\eecr.mix\*.
+2.  Calculate mixture predictions for four heavy metals and four ionic liquids that are provided in the dataset *cytotox*. As for the other dataset, you find fitted dose-response curves for the individual chemicals in the sublist *cytotox\$sgl* and for the measured mixture effects in *cytotox\$eecr.mix*.
 
 ```{r}
 data("cytotox")
@@ -217,7 +217,8 @@ log10(sum(TU_1$ToxUnit))
 
 We obtain a sumTU of `r round(log10(sum(TU_1$ToxUnit)), 2)`, which is above field-derived effect thresholds for invertebrate communities in streams (Liess et al. 2021 *Water Research* 201).
 
-Next we calculate the sumTU for the HC5 of SSDs. This requires the calculation of SSDs as a first step. Note that the calculation of SSDs is only meaningful if multiple data points, i.e. tested species, are available. Let us check this. 
+Next we calculate the sumTU for the HC5 of SSDs. This requires the calculation of SSDs as a first step. Note that the calculation of SSDs is only meaningful if multiple data points, i.e. tested species, are available. Let us check this.
+
 ```{r, echo = TRUE}
 # Check for multiple compound-species combinations
 tox_aggreg_2 %>%
@@ -225,6 +226,7 @@ tox_aggreg_2 %>%
   group_by(TestCAS, PesticideName) %>%
   summarise(frequency = n(), .groups = "drop")
 ```
+
 We have 24 and 14 different test species for carbofuran and alachlor, but only 1 for pirimicarb and acetochlor. Hence, we will limit the calculation of SSDs to the first two, using the condition of the related article, which required at least 6 different species for the calculation of a SSD.
 
 ```{r, echo = TRUE}
@@ -238,7 +240,8 @@ tox_filtered <- tox_aggreg_2 %>%
   )
 ```
 
-We assume a log normal distribution of the data, which makes the computation quite convenient in the case of large data sets (this is not the case here, but the code was developed for > 100 compounds). In this case, the midpoint of the SSD, i.e. the HC50, is equivalent to the mean of the data. We calculate the midpoint for all compounds.
+We assume a log normal distribution of the data, which makes the computation quite convenient in the case of large data sets (this is not the case here, but the code was developed for \> 100 compounds). In this case, the midpoint of the SSD, i.e. the HC50, is equivalent to the mean of the data. We calculate the midpoint for all compounds.
+
 ```{r, echo = TRUE}
 tox_ssd_1 <- tox_aggreg_2 %>% 
              group_by(TestCAS) %>%
@@ -246,13 +249,15 @@ tox_ssd_1 <- tox_aggreg_2 %>%
 ```
 
 To evaluate the slope of the dose-response relationship, we can use the standard deviation. A low and high standard deviation is related to a steep and shallow slope. Before the calculation of the standard deviation, we center the data by the mean. This allows us to interpret the slopes independently of the mean. It makes the slope represent the change in response per standard deviation, not just per unit of the original scale.
+
 ```{r, echo = TRUE}
 mean_all <- mean(tox_filtered$mean_logEC50)
 # center = substract overall mean
 tox_filtered$Center_logEC50 <- tox_filtered$mean_logEC50 - mean_all
 ```
 
-Now we can compute the standard deviation for each compound-species combination where at least 6 data points are available. 
+Now we can compute the standard deviation for each compound-species combination where at least 6 data points are available.
+
 ```{r, echo = TRUE}
 tox_ssd_2 <- tox_filtered %>% 
              group_by(TestCAS) %>%
@@ -260,10 +265,13 @@ tox_ssd_2 <- tox_filtered %>%
 ```
 
 Obviously, we now lack two slopes. Let us check the MOAs of the compounds.
+
 ```{r, echo = TRUE}
 MOA[MOA$CAS %in% tox_aggreg_2$TestCAS, ]
 ```
+
 We are lucky! The two missing slopes belong to compounds that have the same MOA as the compounds for which we have slopes. We assume that the slopes of the SSDs can be approximated from that of compound(s) with the same MOA. Hence, we fill the missing slope data accordingly.
+
 ```{r, echo = TRUE}
 ssd_fin <- tox_ssd_1 %>%
   left_join(tox_ssd_2, by = "TestCAS")
@@ -273,13 +281,16 @@ ssd_fin
 ssd_fin$ssd_slope[3] <- ssd_fin$ssd_slope[1]
 ssd_fin$ssd_slope[4] <- ssd_fin$ssd_slope[2]
 ```
-We compute the HC5, which is the 5th percentile. We have assumed a log-normal distribution, therefore we can use a function to determine quantiles of the normal distribution using the log-transformed slope as input data. 
+
+We compute the HC5, which is the 5th percentile. We have assumed a log-normal distribution, therefore we can use a function to determine quantiles of the normal distribution using the log-transformed slope as input data.
 
 ```{r, echo = TRUE}
  ssd_fin  <-  ssd_fin %>%
               mutate(log_HC5 = ssd_mid + qnorm(0.05, mean = 0, sd = ssd_slope))
 ```
+
 We now merge the data with the field data and can calculate the sumTU for the HC5.
+
 ```{r, echo = TRUE}
 TU_2 <- merge(ssd_fin, field_dat[field_dat$operator == "=", ], by.x = "TestCAS", by.y = "CAS")
 
@@ -290,10 +301,11 @@ TU_2 <- TU_2 %>%
 # calculate the sumTU
 sum(TU_2$TU_HC5)
 ```
-Thus, the field concentrations reach a level of roughly 30% of the HC5, assuming CA to aggregate the exposure to different compounds. 
 
-Finally, let us calculate the RA model. Admittedly, this is not particularly meaningful in this case of just a few compounds, but it serves the purpose of illustration.
-We compute the RA for the HC50, because this is a more robust proxy than the HC5. Thus, we start by calculating the TU_HC50.
+Thus, the field concentrations reach a level of roughly 30% of the HC5, assuming CA to aggregate the exposure to different compounds.
+
+Finally, let us calculate the RA model. Admittedly, this is not particularly meaningful in this case of just a few compounds, but it serves the purpose of illustration. We compute the RA for the HC50, because this is a more robust proxy than the HC5. Thus, we start by calculating the TU_HC50.
+
 ```{r, echo = TRUE}
 # calculate TU
 TU_2 <- TU_2 %>%
@@ -301,11 +313,13 @@ TU_2 <- TU_2 %>%
 ```
 
 Now we compute the sumTU per MOA. As a first step, we merge the MOA data to our dataset.
+
 ```{r, echo = TRUE}
 # append MOA 
 TU_2 <- TU_2 %>%
   left_join(MOA, by = c("TestCAS" = "CAS"))
 ```
+
 In the related study, we used highly aggregated MOAs, because we could only calculate SSDs for a very limited number of compounds. These aggregated MOAs are given by the variable *MOAfinal*. We use this to calculate the sumTU.
 
 ```{r, echo = TRUE}
@@ -352,8 +366,8 @@ Load the data for the Exercise *Exercise.RData*. The object contains new field d
 
 **Advanced exercise**
 
-The R package `standartox` (Scharmueller et al. 2020 https://doi.org/10.3390/data5020046) provides standardised and quality-controlled toxicity data based on the EPA data set that we used above. Instead of using the dataset provided with the exercise, we can query data interactively from standartox. 
-First, we load the package and download the latest version of the database. Make sure you have the package installed, if not, execute the related rows from the installation script of this course (note that standartox is not on CRAN, but on github and therefore also requires installation of the package `remotes`).
+The R package `standartox` (Scharmueller et al. 2020 <https://doi.org/10.3390/data5020046>) provides standardised and quality-controlled toxicity data based on the EPA data set that we used above. Instead of using the dataset provided with the exercise, we can query data interactively from standartox. First, we load the package and download the latest version of the database. Make sure you have the package installed, if not, execute the related rows from the installation script of this course (note that standartox is not on CRAN, but on github and therefore also requires installation of the package `remotes`).
+
 ```{r, echo = TRUE}
 library(standartox)
 
@@ -367,29 +381,28 @@ dat3 = merge(dat2, che, by = 'cl_id', all.x = TRUE)
 ```
 
 This contains all toxicity information for all organism groups, let use get a brief overview.
+
 ```{r, echo = TRUE}
 table(dat2$group)
 table(dat2$habitat)
 ```
 
 We limit the data to freshwater invertebrates and choose mortality as effect and EC50 or LC50 as endpoint.
+
 ```{r, echo = TRUE}
 dat4 <- dat3[habitat == "fresh" & group == "invertebrate" & effect == "mortality" & (endpoint == "EC50" | endpoint == "LC50"), ] 
 ```
 
 Let us check the test durations.
+
 ```{r, echo = TRUE}
 summary(dat4$duration)
 ```
 
 We limit to 24 h to 120 h test duration.
+
 ```{r, echo = TRUE}
 final_dat <- dat4 %>% filter(between(duration, 24, 120))
 ```
 
 Now the data ist ready for use, you can query informtion by CAS number, i.e. variable *casnr*. Note that you would need to justify each step in a scientific analysis, for the sake of this exercise we keep it brief.
-
-
-
-
-
