@@ -18,3 +18,10 @@ DHARMa
 marginaleffects
 glmmTMB
 car
+stringr
+webchem
+rcdk
+fingerprint
+ECOTOXr
+taxize
+R.matlab
