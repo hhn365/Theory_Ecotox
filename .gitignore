@@ -45,5 +45,8 @@ docs/
 # translation temp files
 po/*~
 
+# ignore DS store
+.DS_Store
+
 # RStudio Connect folder
 rsconnect/
