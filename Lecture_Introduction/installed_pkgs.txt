@@ -26,3 +26,6 @@ ECOTOXr
 taxize
 R.matlab
 FD
+lattice
+MASS
+nlme
