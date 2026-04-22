@@ -1,0 +1,326 @@
+---
+title: "Ecotoxicological Databases Exercise"
+author: "Helena S. Bayat"
+format: html
+editor: visual
+---
+
+## Load packages
+
+```{r}
+
+#| label: setup
+library(standartox)
+library(dplyr)
+library(ssdtools)
+library(ggplot2)
+
+```
+
+## Run a Standartox query
+
+Let's start with copper sulfate, a widely used fungicide. We use the CAS number to filter for this chemical. We also filter by endpoint and effect, to select only LC50s or EC50s with mortality. We select a duration of 24 hours, commonly used in acute toxicity testing.
+
+```{r}
+
+# query
+copper = stx_query(cas = '7758-98-7',
+              endpoint_group = 'XX50',
+                effect = 'mortality',
+              concentration_unit = 'g/l',
+              duration = 24)
+
+```
+
+## Explore the data
+
+Lets take a look at our data. We use the group_by() and count() functions of the dplyr package to count how many data points we have per species.
+
+```{r}
+
+# Data points per species
+species_c <- copper %>% group_by(tax_taxon) %>% count()
+species_c
+
+```
+
+Now, using the same functions, let's check how many data points we have per group.
+
+```{r}
+
+# Data points per group
+group_c <- copper %>% group_by(tax_group) %>% count()
+group_c
+
+```
+
+To count the number of species per group, we repeat the functions using the pipe (%\>%).
+
+```{r}
+
+# Number of species per group
+num_c <- copper %>% group_by(tax_taxon, tax_group) %>% count() %>% group_by(tax_group) %>% count()
+num_c
+
+```
+
+## Species sensitivity distribution and HC5
+
+Use the Standartox data to plot a species sensitivity distribution and calculate HC5 for each chemical.
+
+First, we change the column names to be compatible with the ssdtools package.
+
+```{r}
+
+# change column names
+colnames(copper)[7] <- "Conc"
+colnames(copper)[23] <- "Species"
+
+```
+
+Then we trim the data to one value per species - in this case we select the median value.
+
+```{r}
+
+# select median value for each species
+copper <- copper %>% group_by(Species) %>% slice_min(abs(Conc - median(Conc)), n = 1, with_ties = FALSE)
+
+```
+
+Now we fit the distribution to the data.
+
+```{r}
+
+# fit distribution
+ssd_c <- ssd_fit_dists(copper)
+
+```
+
+Then we plot our result.
+
+```{r}
+
+# plot
+ssd_plot_cdf(ssd_c)
+
+```
+
+Finally, we calculate a HC5 from our fitted distribution.
+
+HC5 is the concentration at which 5% of the species are affected; the HC stands for "hazard concentration". This value can be calculated using the fitted species sensitivity distribution. The distribution can also be used to calculate other hazard concentrations, such as HC10, HC20, or HC50.
+
+```{r}
+
+# HC5
+hc5_c <- ssd_hc(ssd_c, proportion = 0.05, ci = TRUE)
+hc5_c$est
+
+```
+
+## Repeat steps for DDT, glyphosate, and imidacloprid
+
+Run a Standartox query, look at the data, plot a SSD, and calculate HC5 for each chemical.
+
+### DDT
+
+Standartox query
+
+```{r}
+
+#query
+ddt = stx_query(cas = '50-29-3',
+              endpoint_group = 'XX50',
+                effect = 'mortality',
+              concentration_unit = 'g/l',
+              duration = 24)
+
+```
+
+Explore the data
+
+```{r}
+
+# Data points per species
+species_d <- ddt %>% group_by(tax_taxon) %>% count()
+
+# Data points per group
+group_d <- ddt %>% group_by(tax_group) %>% count()
+
+# Number of species per group
+num_d <- ddt %>% group_by(tax_taxon, tax_group) %>% count() %>% group_by(tax_group) %>% count()
+
+```
+
+Plot SSD
+
+```{r}
+
+# change column names
+colnames(ddt)[7] <- "Conc"
+colnames(ddt)[23] <- "Species"
+
+# select median value for each species
+ddt <- ddt %>% group_by(Species) %>% slice_min(abs(Conc - median(Conc)), n = 1, with_ties = FALSE)
+
+# fit distribution
+ssd_ddt <- ssd_fit_dists(ddt)
+  
+# plot
+ssd_plot_cdf(ssd_ddt)
+
+```
+
+Calculate HC5
+
+```{r}
+
+# HC5
+hc5_ddt <- ssd_hc(ssd_ddt, proportion = 0.05, ci = TRUE)
+hc5_ddt$est
+
+```
+
+### Glyphosate
+
+Standartox query
+
+```{r}
+
+#query
+glyphosate = stx_query(cas = '1071-83-6',
+              endpoint_group = 'XX50',
+                effect = 'mortality',
+              concentration_unit = 'g/l',
+              duration = 24)
+
+```
+
+Explore the data
+
+```{r}
+
+# Data points per species
+species_g <- glyphosate %>% group_by(tax_taxon) %>% count()
+
+# Data points per group
+group_g <- glyphosate %>% group_by(tax_group) %>% count()
+
+# Number of species per group
+num_g <- glyphosate %>% group_by(tax_taxon, tax_group) %>% count() %>% group_by(tax_group) %>% count()
+
+```
+
+Plot SSD
+
+```{r}
+
+# change column names
+colnames(glyphosate)[7] <- "Conc"
+colnames(glyphosate)[23] <- "Species"
+
+# select median value for each species
+glyphosate <- glyphosate %>% group_by(Species) %>% slice_min(abs(Conc - median(Conc)), n = 1, with_ties = FALSE)
+
+# fit distribution
+ssd_g <- ssd_fit_dists(glyphosate)
+  
+# plot
+ssd_plot_cdf(ssd_g)
+
+```
+
+Calculate HC5
+
+```{r}
+
+# HC5
+hc5_g <- ssd_hc(ssd_g, proportion = 0.05, ci = TRUE)
+hc5_g$est
+
+```
+
+### Imidacloprid
+
+Standartox query
+
+```{r}
+
+#query
+imidacloprid = stx_query(cas = '138261-41-3',
+              endpoint_group = 'XX50',
+              effect = 'mortality',
+              concentration_unit = 'g/l',
+              duration = 24)
+
+```
+
+Explore the data
+
+```{r}
+
+# Data points per species
+species_i <- imidacloprid %>% group_by(tax_taxon) %>% count()
+
+# Data points per group
+group_i <- imidacloprid %>% group_by(tax_group) %>% count()
+
+# Number of species per group
+num_i <- imidacloprid %>% group_by(tax_taxon, tax_group) %>% count() %>% group_by(tax_group) %>% count()
+
+```
+
+Plot SSD
+
+```{r}
+
+# change column names
+colnames(imidacloprid)[7] <- "Conc"
+colnames(imidacloprid)[23] <- "Species"
+
+# select median value for each species
+imidacloprid <- imidacloprid %>% group_by(Species) %>% slice_min(abs(Conc - median(Conc)), n = 1, with_ties = FALSE)
+
+# fit distribution
+ssd_im <- ssd_fit_dists(imidacloprid)
+  
+# plot
+ssd_plot_cdf(ssd_im)
+
+```
+
+Calculate HC5
+
+```{r}
+
+# HC5
+hc5_im <- ssd_hc(ssd_im, proportion = 0.05, ci = TRUE)
+hc5_im$est
+
+```
+
+## Save files
+
+We save the files so that we can look at the results and continue working with the data without rerunning a Standartox query. For a data analysis with many steps, this saves a lot of time and computational power.
+
+The files will be saved to the current working directory of R. The default working directory is the folder in which this exercise file is saved.
+
+```{r}
+
+# write files
+
+write.csv(copper, "copper.csv", row.names = FALSE, na = "")
+write.csv(ddt, "ddt.csv", row.names = FALSE, na = "")
+write.csv(glyphosate, "glyphosate.csv", row.names = FALSE, na = "")
+write.csv(imidacloprid, "imidacloprid.csv", row.names = FALSE, na = "")
+
+```
+
+## Questions
+
+Which chemical has the lowest HC5? Which chemical has the highest?
+
+Which chemical is most toxic?
+
+which chemical has the most data for fish?
+
+Which chemical has the most data for invertebrates?

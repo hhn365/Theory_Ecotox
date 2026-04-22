@@ -1,0 +1,213 @@
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+---
+title: "Lambda-cyhalothrin demonstration: aquatic species sensitivity and risk"
+author: "Paul Ozoh"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: false
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Aim
+
+This short demonstration shows how ecotoxicological database records can be filtered and used to:
+
+1.  Rank aquatic species by chronic sensitivity, and
+2.  Calculate organism-level risk quotients (RQ) using a simplified Tier 1 approach.
+
+The demonstration uses **lambda-cyhalothrin** and a **Step 1 PECsw of 0.23 µg/L**.
+
+## Key assumptions
+
+-   Data source: `ReferencePoints_KJ_2023.xlsx`
+-   Endpoint restriction: **NOEC** only
+-   Units are harmonised to **µg/L**
+-   Exposure route was reported as **"Not reported"**, so aquatic records are identified by species-based classification.
+-   Algae are excluded from this demonstration because the dataset was filtered to NOEC only, whereas algal data are often reported as growth-related endpoints such as ErC50/EbC50 or EC10.
+-   Simplified Tier 1 RAC derivation for each organism:
+
+$$
+RAC = \frac{NOEC}{10}
+$$
+
+-   Risk quotient:
+
+$$
+RQ = \frac{PEC_{sw}}{RAC}
+$$
+
+## Load packages and data
+
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+
+pecsw <- 0.23
+
+raw_data <- read_excel("ReferencePoints_KJ_2023.xlsx")
+
+names(raw_data) <- tolower(names(raw_data))
+
+data_clean <- raw_data
+```
+
+## Filter lambda-cyhalothrin NOEC records
+
+```{r}
+lambda_chronic <- data_clean %>%
+  filter(grepl("lambda", substance, ignore.case = TRUE)) %>%
+  filter(endpoint == "NOEC") %>%
+  mutate(
+    value_ugl = case_when(
+      grepl("mg", unit, ignore.case = TRUE) ~ value * 1000,
+      grepl("µg|ug", unit, ignore.case = TRUE) ~ value,
+      TRUE ~ NA_real_
+    )
+  )
+
+lambda_chronic %>%
+  select(substance, species, endpoint, value, unit, value_ugl)
+```
+
+## Keep aquatic organisms only.
+
+Because `NOEC` is reported for aquatic and terrestrial organisms, aquatic records are selected manually from the species list.
+
+```{r}
+unique(lambda_chronic$species)
+```
+
+```{r}
+lambda_aquatic <- lambda_chronic %>%
+  filter(species %in% c("Fathead minnow", "Harlequin fly", "Mysid shrimp")) %>%
+  mutate(
+    group = case_when(
+      species == "Fathead minnow" ~ "fish",
+      species %in% c("Harlequin fly", "Mysid shrimp") ~ "invertebrates",
+      TRUE ~ "other"
+    )
+  )
+
+lambda_aquatic %>%
+  select(species, group, value_ugl)
+```
+
+## Sensitivity ranking
+
+Lower NOEC values indicate higher sensitivity.
+
+```{r}
+lambda_aquatic %>%
+  arrange(value_ugl) %>%
+  mutate(rank = row_number()) %>%
+  select(rank, species, group, value_ugl)
+```
+
+```{r}
+#| label: sensitivity-plot
+#| fig-width: 9
+#| fig-height: 5
+
+lambda_aquatic <- lambda_aquatic %>%
+  rename(value_ugL = value_ugl)
+
+ggplot(lambda_aquatic,
+       aes(x = reorder(species, value_ugL), y = value_ugL, color = group)) +
+  geom_point(size = 4) +
+  coord_flip() +
+  scale_y_log10() +
+  labs(
+    title = "Aquatic Species Sensitivity Ranking (Lambda-cyhalothrin)",
+    x = "Species",
+    y = "NOEC (µg/L, log scale)"
+  ) +
+  theme_minimal()
+```
+
+### Interpretation
+
+The most sensitive aquatic species is expected to drive the regulatory conclusion in a simplified Tier 1 screen. Here, **Mysid shrimp** is the critical species because it has the lowest NOEC.
+
+## Calculate RAC and RQ for each organism
+
+```{r}
+
+lambda_rq <- lambda_aquatic %>%
+  mutate(
+    rac = value_ugL / 10,
+    rq = pecsw / rac,
+    risk_status = if_else(rq < 1, "Acceptable", "Unacceptable")
+  ) %>%
+  arrange(desc(rq))
+
+lambda_rq %>%
+  select(species, group, value_ugL, rac, rq, risk_status) %>%
+  mutate(
+    value_ugL = signif(value_ugL, 3),
+    rac = signif(rac, 3),
+    rq = signif(rq, 4)
+  )
+```
+
+```{r}
+
+#| fig-width: 9
+#| fig-height: 5
+
+p_rq <- ggplot(lambda_rq, aes(x = reorder(species, rq), y = rq, fill = risk_status)) +
+  geom_col(width = 0.65) +
+  geom_hline(yintercept = 1, linetype = "dashed", linewidth = 1) +
+  geom_text(aes(label = round(rq, 1)), hjust = -0.1, size = 4) +
+  coord_flip(clip = "off") +
+  scale_y_log10(expand = expansion(mult = c(0.05, 0.25))) +
+  labs(
+    title = "Risk quotient by aquatic organism (lambda-cyhalothrin)",
+    x = NULL,
+    y = "RQ = PECsw / RAC (log scale)",
+    fill = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.margin = margin(10, 60, 10, 10),
+    legend.position = "top",
+    panel.grid.minor = element_blank()
+  )
+
+p_rq
+```
+
+## Summary of results
+
+```{r}
+summary_table <- lambda_rq %>%
+  transmute(
+    species,
+    group,
+    noec_ugL = signif(value_ugL, 3),
+    rac_ugL = signif(rac, 3),
+    pecsw_ugL = pecsw,
+    rq = signif(rq, 4),
+    risk_status
+  )
+
+summary_table
+```
+
+## Take-home message
+
+-   The aquatic sensitivity ranking shows that **Mysid shrimp** is the critical species.
+-   The simplified Tier 1 RAC values lead to **RQ \> 1 for all three organisms**.
+-   In this demonstration, **no organism shows acceptable risk at Step 1**.
+-   The comparison also shows how species sensitivity translates directly into risk characterisation.
+
+## 

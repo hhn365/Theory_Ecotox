@@ -1,0 +1,30 @@
+---
+title: "Ecotoxicological databases take home exercise"
+author: "Helena S. Bayat"
+format: html
+editor: visual
+---
+
+## Practice
+
+1.  Query data for the pesticide lambda cyhalothrin with the CAS number 91465-08-6 from Standartox
+
+```{r}
+
+```
+
+2.  Calculate the RAC (regulatory acceptable concentration) and risk quotient for glyphosate and copper
+
+Use the surface water PEC of 31.447 µg/L for glyphosate and 1.24 µg/L for copper, and an assessment factor of 3
+
+```{r}
+
+```
+
+3.  An EFSA conclusion for copper compounds determined a HC5 of 3.73 µg/L for copper sulfate, derived from a SSD with data from 7 fish species. Fit a SSD and calculate the HC5 with the Standartox data from the class exercise for copper sulfate, using only data for fish. How does this HC5 compare to the one from the EFSA conclusion?
+
+```{r}
+
+```
+
+4.  Based on the risk quotients calculated in exercise 2 above, would you approve glyphosate and copper? Why or why not? What other information would you consider when approving a substance?
