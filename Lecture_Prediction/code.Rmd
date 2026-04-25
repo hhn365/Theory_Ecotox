@@ -7,12 +7,12 @@ output:
 
 ## Introduction
 
-In this session we aim to link ecotoxicological data to databases that provide data for prediction and to exemplarily compute the similarity between chemicals.
+In this session, we will link ecotoxicological data to databases that support predictive modeling and we will illustrate how to calculate chemical similarity.
 
 To work with realistic data, we will use data from the EPA Ecotoxicology database. We use the data from the `standartox` R package, which has undergone some pre-processing and outlier removal.
 
 ```{r, echo = FALSE}
-setwd("/Users/ralfs/Arbeit/Lehre_Betreuung/2025/Theoretical_ecotox/Lecture_9")
+setwd("/Users/ralfs/Arbeit/Lehre_Betreuung/2026/Theoretical_Ecotox/Lecture_prediction")
 library(standartox)
 library(stringr)
 library(dplyr)
@@ -33,13 +33,13 @@ library(R.matlab)
 
 ```{r, eval = FALSE}
 # Query database and store locally to avoid querying each time
-dat <- stx_data(dir_out = "/Users/ralfs/R/0_datasets/standartox")
-tax <- stx_taxa(dir_out = "/Users/ralfs/R/0_datasets/standartox")
-che <- stx_chem(dir_out = "/Users/ralfs/R/0_datasets/standartox")
+dat <- stx_data(stx_dir = "/Users/ralfs/R/0_datasets/standartox")
+tax <- stx_taxa(stx_dir = "/Users/ralfs/R/0_datasets/standartox")
+che <- stx_chem(stx_dir = "/Users/ralfs/R/0_datasets/standartox")
 # merge data
 dat2 <- merge(dat, tax, by = 'tl_id', all.x = TRUE)
 dat3 <- merge(dat2, che, by = 'cl_id', all.x = TRUE)
-# save(dat3, "Standartox.Rdata")
+# save(dat3, file = "Standartox.Rdata")
 # to load requires the bit64 package
 ```
 
@@ -52,16 +52,16 @@ load('Standartox.Rdata')
 We limit the dataset to Ephemeropterans, measured toxicity (i.e. ignoring *larger than* values), mortality, median toxic concentrations *XX50* and to test durations between 24 and 120 h. Then we check the taxonomic level of the results as well as the units of the concentrations.
 
 ```{r}
-dat4 <- dat3 %>% filter(qualifier == "=" & order == "Ephemeroptera" & effect == "mortality" & endpoint_group == "XX50" & between(duration, 24, 120))
+dat4 <- dat3 %>% filter(qualifier == "=" & tax_order == "Ephemeroptera" & effect == "mortality" & endpoint_group == "XX50" & between(duration, 24, 120))
 
 # display concentration units and level
-dat4 %>% select(concentration_unit, rank) %>% table()
+dat4 %>% select(concentration_unit, tax_rank) %>% table()
 ```
 
 A relevant fraction of tests has been done with organisms that were only identified to family or genus level. It remains open whether the tests were done with mixtures of taxa or identification was limited to higher taxonomic levels. The most likely explanation is that the taxa were not identified to species level. How to deal with this situation depends on the purpose of the study. If the aim is, for example, prediction and the data would be considered independent, this could incur bias if in reality the same taxon was tested. Here, we limit the data to the species level.
 
 ```{r}
-dat4_spec <- dat4[rank == "species", ]
+dat4_spec <- dat4[tax_rank == "species", ]
 ```
 
 Moreover, we bring all concentrations to the same unit. As an approximation, ppb corresponds to µg L^-1^. We create a small function for conversion and then convert the concentrations where the unit of the concentration is ppb. This can easily be done with the `case_when()` function used within `mutate()`.
@@ -84,7 +84,7 @@ The dataset contains multiple entries per species-chemical combination, which we
 
 ```{r}
 dat5 <- dat4_fin %>%
-			group_by(family, genus, taxon, casnr, cas, cname, concentration_unit) %>%
+			group_by(tax_family, tax_genus, tax_taxon, casnr.x, cas, common_name, concentration_unit) %>%
   			summarise(geo_mean = exp(mean(log(concentration))), .groups = "drop")
 
 ```
@@ -93,7 +93,7 @@ We now identify the unique chemicals in the data set for which we extract physic
 
 ```{r}
 chemicals <- dat5 %>% 
-					select(casnr, cas, cname) %>% 
+					select(casnr.x, cas, common_name) %>% 
   					distinct()
 # count chemicals
 nrow(chemicals)
@@ -121,7 +121,7 @@ comptox_results$`Main Data`
 
 **Inspect the data yourself. Why do some compounds consistently lack information for the octanol water partition coefficient, water solubility, vapor pressure and similar variables?**
 
-The package `ECOTOXr` provides also a function to access the Ecotoxicology database of the US EPA, i.e. the raw data that has been polished in the Standartox database, but this is beyond the scope here and described in an article by [Vries (2024)](https://doi.org/10.1016/j.chemosphere.2024.143078).
+The package `ECOTOXr` provides also a function to access the Ecotoxicology database of the US EPA, i.e. the raw data, while these data have been polished in the Standartox database. For further details see the article by [Vries (2024)](https://doi.org/10.1016/j.chemosphere.2024.143078).
 
 We can also query physico-chemical properties from the [PubChem database](https://pubchem.ncbi.nlm.nih.gov). This can be done using the function `pc_prop` in the package `webchem`. For detailed information on webchem see the article by [Szöcs et al. (2020)](https://www.jstatsoft.org/article/view/v093i13). To use this function, we first need the so-called Pubchem Compound ID (CID), which can be queried using the function `get_cid()`.
 
@@ -189,15 +189,15 @@ labels
 plot(cls, main = "", labels = labels)
 ```
 
-Not surprisingly, ammonia and ammonium chloride have the highest similarity. In the package [vignette](https://cran.r-project.org/web/packages/rcdk/vignettes/using-rcdk.html) it is also described how you could identify the most similar target molecule, for example if you wanted to use this in prediction. In addition, the vignette further shows what you can do with the `rcdk` package.
+Not surprisingly, ammonia and ammonium chloride have the highest similarity. In the package [vignette](https://cran.r-project.org/web/packages/rcdk/vignettes/using-rcdk.html) it is also described how you could identify the most similar target molecule, for example, if you wanted to use this in prediction. In addition, the vignette further shows what you can do with the `rcdk` package.
 
-If you are interested, also checkout the package `ChemmineR`, which provides multiple functions for chemical informatics. Consider going through the [online tutorial](https://www.bioconductor.org/packages/devel/bioc/vignettes/ChemmineR/inst/doc/ChemmineR.html#Searching_PubChem).
+If you are interested, also check out the package `ChemmineR`, which provides multiple functions for chemical informatics. Consider going through the [online tutorial](https://www.bioconductor.org/packages/devel/bioc/vignettes/ChemmineR/inst/doc/ChemmineR.html#Searching_PubChem).
 
-Finally, we check out biological and ecological complementary information that may be useful for prediction. As for the chemicals, we first extract the unique taxa we have.
+Finally, we retrieve biological and ecological complementary information that may be useful for prediction. As for the chemicals, we first extract the unique taxa we have.
 
 ```{r}
 ourtaxa <- dat5 %>% 
-					select(family, genus, taxon) %>% 
+					select(tax_family, tax_genus, tax_taxon) %>% 
   					distinct()
 # count chemicals
 nrow(ourtaxa)
@@ -207,7 +207,7 @@ ourtaxa
 We have a range of taxa from Ephemeroptera. For several analyses, it can be relevant to have the full taxonomic tree and check whether the names are spelt correctly. This can be done with the package `taxize`. We first resolve the names.
 
 ```{r}
-temp_names <- gna_verifier(ourtaxa$taxon)
+temp_names <- gna_verifier(ourtaxa$tax_taxon)
 temp_names
 ```
 
@@ -222,9 +222,9 @@ temp_names %>% select(submittedName, matchedName, acceptedNameScore)
 All fine, we do not have to deal with spelling errors or alike. We can also use the `taxize` package to add taxonomic information. This is done with the function `classification()`. This takes a bit, therefore we limit this to the first 10 taxa.
 
 ```{r, echo=FALSE}
-taxaclass <- classification(ourtaxa$taxon[1:10], db = 'ncbi')
+taxaclass <- classification(ourtaxa$tax_taxon[1:10], db = 'ncbi')
 # 8 of 10 found
-taxaclass2 <- classification(ourtaxa$taxon[1:10], db = 'gbif')
+taxaclass2 <- classification(ourtaxa$tax_taxon[1:10], db = 'gbif')
 # all taxa are found
 taxaclass2
 ```
@@ -232,21 +232,21 @@ taxaclass2
 We obtain information on the taxonomy from kingdom to species. We can also query specific information, e.g. family level:
 
 ```{r, echo=FALSE}
-family_temp <-tax_name(ourtaxa$taxon[1:10], get = "family", db = "both")
+family_temp <-tax_name(ourtaxa$tax_taxon[1:10], get = "family", db = "both")
 # 9 of 10 found
 ```
 
 Except for *Caenis maxima*, we have found the families for all taxa. We could also query all downstream taxa. For example, if we only had family information, to get an idea of how many taxa exist in this taxonomic branch. Let us check this for the taxa that were tested at family level.
 
 ```{r, echo = FALSE}
-dat4_fam <- dat4[rank == "family", ]
+dat4_fam <- dat4[tax_rank == "family", ]
 # extract unique families
 dat_families <- dat4_fam %>%
-                select(family)  %>%
+                select(tax_family)  %>%
                 distinct()
 
 # Watch out - running the following function can take quite a bit of time.
-down_families <- downstream(dat_families$family, downto = "species", db = "gbif")
+down_families <- downstream(dat_families$tax_family, downto = "species", db = "gbif")
 head(down_families[[1]])
 head(down_families[[2]])
 ```
@@ -264,7 +264,7 @@ Theoretically, the `biomonitoR` package could be used to add traits of freshwate
 
 ```{r}
 ourtaxa_up <- ourtaxa %>%
-              mutate(Taxa = taxon, 
+              mutate(Taxa = tax_taxon, 
                      Site = 10)
 # function requires a column called Taxa and abundances in a site
 # as a workaround, we add a dummy column with abundances
@@ -275,21 +275,17 @@ data_bio
 # but we can use an own tree to improve the matching
 dfref_gbif <- get_gbif_taxa_tree(ourtaxa_up$Taxa)
 # a few taxa are synonyms of accepted names
-dfref_gbif$synonym
-# replace synonym in our data by accepted name
-ourtaxa_up2 <- ourtaxa_up %>%
-  left_join(dfref_gbif$synonym, by = c("Taxa" = "synonym")) %>%
-  mutate(Taxa = if_else(!is.na(accepted), accepted, Taxa)) %>%
-  select(-accepted)
-ourtaxa_up2
+dfref_gbif$status
+dfref_gbif_comb <- cbind(dfref_gbif$taxonomy, dfref_gbif$status)
+# Taxa is the name in our data, Species the GBIF name
 
 # now we can convert to a biomonitor object
-data_asb <- as_biomonitor(ourtaxa_up2[ , 4:5], dfref = dfref_gbif$taxonomy)
+data_asb <- as_biomonitor(ourtaxa_up[ , 4:5], dfref = dfref_gbif$taxonomy, group = "mi", correct_names = FALSE)
 data_asb
-# one taxon was removed because it had no match
+# one taxon was removed because it had no match, try to fix this, what could you do?
+
 # we need to run the function aggregate_taxa before, otherwise trait assignment does not work.
 # This function harmonizes taxonomic levels
-
 data_asb_agg <- aggregate_taxa(data_asb)
 data_asb_agg
 
@@ -298,7 +294,9 @@ data_ts <- assign_traits(data_asb_agg, tax_lev = "Family")
 data_ts
 ```
 
-Now we have some traits at the family level for our species. However, the function would not run at genus level because of too few matches. Generally, it may be easier and more flexible to import the trait database into R and link the data manually. For example, for freshwater organisms, a more current database is the freshwaterecology.info database, which can be [accessed via API](https://www.freshwaterecology.info/fweapi2docu.php#docur). For further details on using the biomonitoR package, in particular for calculating ecological metrics, have a look at the vignette. 
+**Try setting `correct_names = TRUE` in the `as_biomonitor()` function.**
+
+Now we have some traits at the family level for several of our species. However, the function would not run at genus level because of too few matches. It would need more fiddling around to have more matches. Generally, it may be easier and more flexible to import the trait database into R and link the data manually. For example, for freshwater organisms, a more current database is the freshwaterecology.info database, which can be [accessed via API](https://www.freshwaterecology.info/fweapi2docu.php#docur). For further details on using the biomonitoR package, in particular for calculating ecological metrics, have a look at the vignette. 
 ```{r, eval = FALSE}
 vignette("functional", package = "biomonitoR")
 ```
@@ -320,8 +318,8 @@ allLabel <- readMat("AmPdata/allLabel.mat")
 
 ```{r}
 # But we can load an R object where I saved the information
-# Will not run on your machine as long as you do not change the path
-load('~/Arbeit/Lehre_Betreuung/2025/Theoretical_ecotox/Lecture_9/allStat_addmypet.RData')
+# Will not run on your machine if you do not have the file from github in your working directory
+load('allStat_addmypet.RData')
 ```
 
 The loaded objects are complex, often nested lists. For example:
@@ -370,7 +368,7 @@ families_ephem
 
 Only 4 families are represented in the database, which relate to 7 taxa.
 
-**If you want to practice, choose a different organism group in the beginning, which would also translate into a different set of tested chemicals, and re-run the code for this!**
+**If you want to practice, choose a different organism group in the beginning, which would also translate into a different set of tested chemicals, and adjust the code for these taxa!**
 
 
 
