@@ -1,6 +1,8 @@
 ---
 title: "Modelling dose-reponse data in R"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 # Introduction
@@ -75,7 +77,7 @@ abline(h = 0, lty = 2)
 
 The residuals vs. fitted values plot indicates that the chosen model function provides an appropriate description of the dose-response data. The residuals are randomly scattered around the reference line, which is the x-axis, given that the residuals should be centered around 0. Moreover, the spread of points appears consistent across the range of fitted values, which represents the range of predicted responses. This supports that the model assumption of variance homogeneity is met.
 
-Finally, we produce a plot using the *ggplot2* package instead of base graphics. I provide the code below, but introducing this plotting system is beyond the scope of this course. However, the beginning of the code also shows how to create confidence intervals through prediction using the fitted model. \*\*Inspect the *newdata* object, what are these values?"
+Finally, we produce a plot using the *ggplot2* package instead of base graphics. I provide the code below, but introducing this plotting system is beyond the scope of this course. However, the beginning of the code also shows how to create confidence intervals through prediction using the fitted model. **Inspect the *newdata* object, what are these values?**
 
 ```{r, fig.width = 5, fig.height = 5}
 library(ggplot2)
@@ -97,7 +99,7 @@ geom_line(data = newdata, aes(x = conc, y=p)) +
 geom_ribbon(data = newdata,
 aes(x = conc, y = p, ymin = pmin, ymax = pmax),
 alpha = 0.2) +
-coord_trans(x = "log") +
+coord_transform(x = "log") +
 xlab("Ferulic acid (mM)") + ylab("Root length (cm)")
 ```
 
@@ -174,7 +176,7 @@ We use the endosulfan data and fit an SSD. Several distributions are commonly us
 # we use the ssdtools package
 library(ssdtools)  
 # we fit the distribution
-ssd_ln <- ssd_fit_dists(data = endosulfan.art, left = "ATV", dist = "lnorm")
+ssd_ln <- ssd_fit_dists(data = endosulfan.art, left = "ATV", dists = "lnorm")
 # and create the plot
 ssd_plot_cdf(ssd_ln)
 ```
@@ -214,14 +216,14 @@ ssd_hc(ssd_ln, proportion = 0.05, ci = TRUE)
 A nice feature of the `ssd_fit_dists()` function is that we can fit multiple distributions simultaneously. Let us fit multiple distributions and compare their fit, again using the AIC corrected for small sample size (i.e. corrected AIC (AIC~c~)).
 
 ```{r}
-ssd_fitdists <- ssd_fit_dists(data = endosulfan.art, left = "ATV", dist = c("lnorm", "burrIII3", "weibull", "llogis"))
+ssd_fitdists <- ssd_fit_dists(data = endosulfan.art, left = "ATV", dists = c("lnorm", "burrIII3", "weibull", "llogis"))
 ssd_plot_cdf(ssd_fitdists)
 ```
 
 Visually, the Burr type III distribution provides the best fit to the data. Let us check with the AIC~c~.
 
 ```{r}
-ssd_gof(ssd_fitdists)
+ssd_gof(ssd_fitdists, wt = TRUE)
 ```
 
 We focus on the AIC~c~ given by *aicc* in the output. The *delta* gives the difference between the AIC~c~ values. The output also contains several statistical tests that test the match between an empirical and theoretical distribution. However, visual checking has been recommended in textbooks and statistical tests relying on *p*-values are sensitive to sample size. Nevertheless, we see that the model using the log-normal distribution has the lowest AIC~c~ followed by the Burr type III distribution. Still, the Burr type III model seems to fit better at the margins.
@@ -307,10 +309,9 @@ Overall, this approach allows for a direct comparison of chemical toxicity. It i
 
 **Now it is up to you**
 
-Fit a joint two-parameter log-logistic model with the lower and upper limits fixed. The argument `curveid` should be set to the variable *type*. Since the data are binomial, use `dead/total` as the response variable. Alternatively, you can calculate the proportion surviving or dead and use that as the response.\
-Then, compare the EC50 values using the function `ED()` instead of `EDcomp()`.
+Fit a joint two-parameter log-logistic model with the lower and upper limits fixed. The argument `curveid` should be set to the variable *type*. Since the data are binomial, use `dead/total` as the response variable. Alternatively, you can calculate the proportion surviving or dead and use that as the response. Then, compare the EC50 values using the function `ED()` instead of `EDcomp()`.
 
-*For those that want to explore further*:This case study focuses on the toxicity of four types of selenium. To perform pairwise comparisons of their toxicity, you can use the R package *multcomp*. After installing the package, add the argument `multcomp = TRUE` to the `ED()` function and save the resulting object. Pairwise comparisons can then be run using the following R code.
+*For those that want to explore further*: This case study focuses on the toxicity of four types of selenium. To perform pairwise comparisons of their toxicity, you can use the R package *multcomp*. After installing the package, add the argument `multcomp = TRUE` to the `ED()` function and save the resulting object. Pairwise comparisons can then be run using the following R code.
 
 ```{r, eval=FALSE}
 # This code will be shown but not executed
