@@ -128,7 +128,7 @@ eeia$ia[ , "EC50"]/EC50_meas
 
 1.  Do the MDRs differ, when you calculate the mixture toxicity for the effect level EC5 for the equal effect concentration? Note that you also need to adjust the measured mixture effects accordingly.
 
-2.  Calculate mixture predictions for four heavy metals and four ionic liquids that are provided in the dataset *cytotox*. As for the other dataset, you find fitted dose-response curves for the individual chemicals in the sublist *cytotox\$sgl* and for the measured mixture effects in *cytotox\$eecr.mix*.
+2.  Calculate mixture predictions for four heavy metals and four ionic liquids that are provided in the dataset *cytotox*. As for the other dataset, you find fitted dose-response curves for the individual chemicals in the sub list *cytotox\$sgl* and for the measured mixture effects in *cytotox\$eecr.mix*.
 
 ```{r}
 data("cytotox")
@@ -142,8 +142,6 @@ We calculate the CA for one sampling site where 4 out of 10 target pesticides we
 First we load and inspect the data. The Rdata object contains three objects: *MOA*, *field_dat* and *toxdat*. *MOA* contains information on the mode of action of the chemicals, which is required to decide on the null model. Similar and dissimilar MOAs suggest to use CA and IA, respectively. *field_dat* contains information on the results of the chemical analysis for the given sampling site. *toxdat* contains information on single species toxicity tests.
 
 ```{r}
-setwd("/Users/ralfs/Arbeit/Lehre_Betreuung/2025/Theoretical_ecotox/Lecture_5_6")
-
 load('Data.Rdata')
 
 # Inspect data sets
@@ -198,7 +196,7 @@ tox_aggreg_2   <-  tox_aggreg %>%
 After this pre-processing, we can calculate Toxic Units (TU) for the different chemicals. We calculate the TUs for *Daphnia magna*, which is a frequently tested species considered representative for toxicity towards aquatic invertebrates.
 
 ```{r, echo = TRUE}
-# Subsetting to data for Daphnia magna
+# Sub-setting to data for Daphnia magna
 daph_tox <- tox_aggreg_2 %>% 
             filter(LATINNAME == "Daphnia magna")
 
@@ -252,7 +250,7 @@ To evaluate the slope of the dose-response relationship, we can use the standard
 
 ```{r, echo = TRUE}
 mean_all <- mean(tox_filtered$mean_logEC50)
-# center = substract overall mean
+# center = subtract overall mean
 tox_filtered$Center_logEC50 <- tox_filtered$mean_logEC50 - mean_all
 ```
 
@@ -312,7 +310,7 @@ TU_2 <- TU_2 %>%
      mutate(TU_HC50 = Conc / 10^ssd_mid)
 ```
 
-Now we compute the sumTU per MOA. As a first step, we merge the MOA data to our dataset.
+Now we compute the sumTU per MOA. As a first step, we merge the MOA data with our dataset.
 
 ```{r, echo = TRUE}
 # append MOA 
@@ -349,7 +347,7 @@ TU_4  <-  TU_4 %>%
 TU_4
 ```
 
-We can see that the narcotic substances have practically zero effect (the msPAF is quasi 0). As a final step, we compute the RA, where the formula is: $msPAF_{RA} = 1 - \prod_{i=1}^n msPAF_i$.
+Note that the narcotic substances have practically zero effect (the msPAF is quasi 0). As a final step, we compute the RA, where the formula is: $msPAF_{RA} = 1 - \prod_{i=1}^n msPAF_i$.
 
 ```{r, echo = TRUE}
 msPAF_RA <- 1-((1-TU_4$msPAF[1])*(1-TU_4$msPAF[2]))
@@ -365,10 +363,17 @@ Thus, we estimate that approximately 2% of species would be affected.
 Load the data for the Exercise *Exercise.RData*. The object contains new field data (*field_dat2*) and more comprehensive toxicity data (*tox_dat_4*). Use these data (together with the other files where needed) and compute the sumTU *Daphnia magna* for this site as well as the sumTU HC5. Also consider calculating the msPAF RA if you want to boost your skills. You could also calculate the TU for the most sensitive species, how would you do this?
 
 **Advanced exercise**
+Instead of using the data set provided with the exercise, we can query data interactively. The R package `standartox` (Scharmueller et al. 2020 <https://doi.org/10.3390/data5020046>) provides standardised and quality-controlled toxicity data based on the EPA data set that we used above. We already used it in previous sessions and you can simply load the Rdata object that we saved. Alternatively download from the GitHub repo of this course and place it in the directory from which you loaded your RMarkdown file.
 
-The R package `standartox` (Scharmueller et al. 2020 <https://doi.org/10.3390/data5020046>) provides standardised and quality-controlled toxicity data based on the EPA data set that we used above. Instead of using the dataset provided with the exercise, we can query data interactively from standartox. First, we load the package and download the latest version of the database. Make sure you have the package installed, if not, execute the related rows from the installation script of this course (note that standartox is not on CRAN, but on github and therefore also requires installation of the package `remotes`).
+```{r, echo = FALSE}
+# only execute when you have saved the .Rdata file
+library(bit64) # needed to interpret some formats
+load('Standartox.Rdata', verbose = TRUE)
+```
 
-```{r, echo = TRUE}
+In case, you do not have the file, you can execute the code below. First, we load the package and download the latest version of the database. Make sure you have the package installed, if not, execute the related rows from the installation script of this course (note that standartox is not on CRAN, but on github and therefore also requires installation of the package `remotes`).
+
+```{r, eval = FALSE}
 library(standartox)
 
 dat = stx_data()
@@ -380,29 +385,31 @@ dat3 = merge(dat2, che, by = 'cl_id', all.x = TRUE)
 # pre-processing according to the github code
 ```
 
-This contains all toxicity information for all organism groups, let use get a brief overview.
+The standartox data contains all toxicity information for all organism groups, we generate a brief overview.
 
 ```{r, echo = TRUE}
-table(dat2$group)
-table(dat2$habitat)
+table(dat3$tax_group)
+table(dat3$tax_habitat)
 ```
 
 We limit the data to freshwater invertebrates and choose mortality as effect and EC50 or LC50 as endpoint.
 
 ```{r, echo = TRUE}
-dat4 <- dat3[habitat == "fresh" & group == "invertebrate" & effect == "mortality" & (endpoint == "EC50" | endpoint == "LC50"), ] 
+dat4 <- subset(dat3, qualifier == "=" & tax_habitat == "fresh" & 
+             tax_group == "invertebrate" & effect == "mortality" & 
+             endpoint_group == "XX50")
 ```
 
-Let us check the test durations.
+Let us check the test duration.
 
 ```{r, echo = TRUE}
 summary(dat4$duration)
 ```
 
-We limit to 24 h to 120 h test duration.
+We limit the test duration to 24 h to 120 h. Note that this requires justification in a real project; for example, one could verify the extent to which toxicity changes with duration and select a range with consistent toxicity levels.
 
 ```{r, echo = TRUE}
 final_dat <- dat4 %>% filter(between(duration, 24, 120))
 ```
 
-Now the data ist ready for use, you can query informtion by CAS number, i.e. variable *casnr*. Note that you would need to justify each step in a scientific analysis, for the sake of this exercise we keep it brief.
+Now the data is ready for use, you can query information by CAS number, i.e. variable *casnr*. Note that you would need to justify each step in a scientific analysis, for the sake of this exercise we keep it brief. Be aware that taxonomic level and the units of concentrations may still vary in the data set.
