@@ -1,0 +1,333 @@
+---
+title: "Exercises: Stressor interactions and statistical interactions"
+author: "Iris Madge Pimentel"
+date: "2025-06-04"
+output:
+  html_document:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(details)
+```
+
+# Introduction and setup
+
+In this exercise, we will learn how to use regression models to analyse stressor interactions. We test for deviations from two multiple-stressor null models: From the simple addition (AD) and multiplicative (MU) null model. We fit generalized linear models (GLMs) and learn which null model aligns with which regression model specification. We will produce conditional plots and marginal effects plots for a closer analysis of detected interactions and we will also take a look at how to use the **marginaleffects** package to analyse stressor interactions if the null model does not align with the best-fitting regression model.
+
+The following R packages are required:
+
+```{r message=FALSE}
+library(tidyverse) # for data handling and plotting
+library(DHARMa) # for residual diagnostics in GLMs
+library(marginaleffects) # for inference with regression models
+library(glmmTMB) # for GLMs with negative binomial regression
+library(car) # companion functions to analyse regression models
+set.seed(1) # for reproducibility
+```
+
+We load in the example data sets used as case studies. One data set will be used to exemplify an interaction analysis for two factorial stressors and the other for a factorial-gradient combination.
+
+```{r message=FALSE}
+df.mesocosms <- read_csv("data/Beermannetal_2018_abundances.csv")
+df.simulated <- read_csv("data/simulated_survival_data.csv")
+```
+
+# Case study with factor-factor interaction
+
+The case study is taken from Beermann et al. (2018). They conducted a full-factorial stream mesocosm experiment and studied responses of the macroinvertebrate community to three common anthropogenic stressors (salinization, flow velocity reduction and sediment input). First, we focus on changes in total abundances of the mayfly family Baetidae caused by two focal stressors: salinization and reduced flow velocity. 
+
+We start by taking a look at the structure of the data with the *head()* function.
+
+```{r}
+head(df.mesocosms)
+```
+
+We should re-code the stressors in the experiment as factors. While some R functions can also handle character variables (this is how they are coded after reading in the table in R), it is generally safer to use factors.
+
+```{r}
+# create factors: 
+# specifying the levels gives you control over what is the reference level -
+# the one that is mentioned first 
+df.mesocosms$Flow <- factor(df.mesocosms$Flow, levels = c("normal flow", "reduced flow"))
+df.mesocosms$Salinity <- factor(df.mesocosms$Salinity, levels = c("no salt", "salt"))
+df.mesocosms$Sediment <- factor(df.mesocosms$Sediment, levels = c("no sediment", "sediment"))
+```
+
+In these exercises, we want to focus on two-way interactions and not include any higher-order interactions. Therefore, here we reduce our sample to all mesocosms that have control conditions for sediment ("no sediment").
+
+```{r}
+df.mesocosms.nsed <- df.mesocosms |> 
+    filter(Sediment == "no sediment")
+```
+
+## Regression model specification and validation
+
+Next, we fit a Poisson regression model and check model assumptions with residual plots. We are dealing with a count variable (abundances), this is why Poisson regression is more appropriate than Gaussian regression. In the *glm()* function, we can specify the assumed conditional distribution of our response variable (family = poisson) and we specify the regression equation (Abund ~ Salinity * Flow). By using '*', we do not only include the two-way-interaction, but also all lower-level terms. 
+
+```{r}
+mod.Baetidae.1 <- glm(Baetidae ~ Salinity * Flow, 
+                family = poisson(), data = df.mesocosms.nsed)
+
+# residual plots with DHARMa package
+simulationOutput <- simulateResiduals(fittedModel = mod.Baetidae.1, plot = F)
+plot(simulationOutput)
+plotResiduals(simulationOutput, form = df.mesocosms.nsed$Salinity)
+plotResiduals(simulationOutput, form = df.mesocosms.nsed$Flow)
+
+# dispersion test
+testDispersion(mod.Baetidae.1, plot = F)
+```
+
+The DHARMa package creates residual plots which are easier to interpret than the standard residual plots you would have with a GLM. Here, both residual plots and the dispersion test indicate overdispersion: Ideally, we would expect all points in the QQ plot to fall along the diagonal line, but the S-shape indicates that residuals show a higher dispersion than expected for the Poisson distribution. This can be accounted for by using a negative binomial regression, instead. This can be specified in the *glmmTMB()* function (but not in *glm()*).
+
+## Exercise 1
+
+Specify a negative binomial regression model (family = nbinom2() in the *glmmTMB()* function) and use residual diagnostics as done above to check if the model can be interpreted.
+
+```{r}
+# Your place for coding :)
+```
+
+## Exercise 2
+
+Can you reconstruct the regression equation based on the output from the *summary()* command? Try to manually calculate the model prediction for...
+
+(a) No stressor
+
+(b) Increased salinity
+
+(c) Reduced flow velocity
+
+(d) Increased salinity and reduced flow velocity
+
+Important: Just like Poisson regression does, negative binomial regression uses a logarithmic link function. Remember to convert your results from the link scale to the response scale by exponentiation (*exp()*).
+
+```{r}
+# Your place for coding :)
+```
+
+## Model predictions with marginaleffects
+
+We can compare the results with those from the *predictions()* function (**marginaleffects** package). This function takes a regression model as input and calculates the model predictions either for the observed stressor conditions (the default, will return predictions for every row in the original data frame) or for a user-specified datagrid. To avoid getting a 64-row long table as an output, we will provide a datagrid with only the unique four combinations of stressor conditions we are interested in. 
+
+```{r}
+# predictions() function
+mod.Baetidae.2.pred <- predictions(mod.Baetidae.2, 
+            # this creates predictions for all unique combinations of factors
+            newdata = datagrid(FUN_factor = unique),
+            # to surpress a warning 
+            re.form = NA)
+
+# select relevant columns. By conversion to a tibble, all columns are displayed in the printout
+mod.Baetidae.2.pred |> select(Salinity, Flow, estimate) |> tibble()
+```
+
+Any minor differences we can see are due to rounding.
+
+## Exercise 3
+
+Based on the single-stressor effects, what would be the expectation for...
+
+a) The simple addition null model
+
+b) Multiplicative null model
+
+c) The dominance null model
+
+Which of three null models is closest to the (modelled) joint stressor effect, which one is farthest?
+
+Hint: Early in the lecture, you can find a formula for each of the null models.
+
+```{r}
+# Your place for coding :)
+```
+
+## Exercise 4
+
+The *summary()* output for our regression model showed that the interaction term between salinity and reduced flow velocity was non-significant at the 5% alpha level. Which of the null models was statistically evaluated with this interaction term? 
+
+Instead, we would like to statistically evaluate the simple addition null model. We can do this in two ways: (1) We can change the link function. (2) We can use post-estimation inference.
+
+We will start with changing the link function.
+
+Re-fit the regression model, specifying nbinom2(link = "identity") as distributional family. Use the *Anova()* function form the car-package to evaluate statistical significance for regression terms. Calculate model predictions for this refitted model (as above with the *predictions()* function for each treatment combination). What do you notice when taking a look at the predictions before?
+
+Comment: The *Anova()* function would also allow you to evaluate the statistical significance of factor variables with more than one level (producing a single p-value for the factor variable instead of one for each comparison to the base level of the factor), and to interpret the statistical significance of main effects, if the interaction effect is non-significant. This last point cannot be done with the *summary()* command without refitting the model without interactions (and the p-values are then actually inaccurate, if you want to perform a confirmatory analysis; however, we won't go into more detail here).
+
+```{r}
+# Your place for coding :)
+```
+
+## Conditional plots
+
+We continue with generating a conditional plot using the *ggplot()* function. If you haven't used *ggplot()* before it might make sense to take a look at the associated cheat sheet to learn about how it is used: https://rstudio.github.io/cheatsheets/html/data-visualization.html
+
+For the regression model with the logarithmic link, we keep our estimates on the logarithmic (=link) scale for the conditional plot to reflect the multiplicative null model. This is done in the *predictions()* function by specifying type = "link" as argument. The default, type = "response", makes predictions on the response scale.
+
+```{r}
+mod.Baetidae.2.pred.link <- predictions(mod.Baetidae.2, 
+            newdata = datagrid(FUN_factor = unique),
+            type = "link",
+            re.form = NA) 
+
+# Logarithmic link
+ggplot(data = mod.Baetidae.2.pred.link, aes(x = Salinity, y = estimate, color = Flow)) + 
+    geom_point() + 
+    # geom_line needs a group specification
+    geom_line(aes(group = Flow)) +
+    labs(y = "Log(Abundance (Baetidae))", title = "Logarithmic link: Multiplicative null model")
+```
+
+## Exercise 5
+
+Now, plot the predictions on the response scale (from the table mod.Baetidae.2.identity.pred generated above) as points (*geom_point()*) with Salinity on the x-axis and colored by flow velocity. Connect points with the same flow velocity condition with a straight line (*geom_line(group = Flow)*, similar to the example above). What would you expect if the data would perfectly fit the additive null model?
+
+```{r}
+# Your place for coding :)
+```
+
+## Maringal effects
+
+We will now create a marginal effects plot for both regression models. For this, you can use the *slopes()* function from the **marginaleffects** package along with ggplot. 
+
+Using the *slopes()* function, calculate the marginal effect of flow reduction under salt conditions and under control conditions for salt. Make sure to do this on the link scale (type = "link") - this will show us what the regression model evaluated with the interaction term. For the function with the identity link, the link scale is the same as the response scale, for other link functions, however, this is not the case.
+
+In the *slopes()* function, you specify the regression model and the variable for which you want to calculate the marginal effect. The *by* argument can be used to average all marginal effects across that variable - this is relevant if we would have additional covariates, here it simply results in a table with only two rows instead of 64 (all observations). 
+
+We create a marginal effects plot for both regression models by plotting the effect of flow velocity in dependence of salt conditions.
+
+```{r}
+marginal.effects.log <- slopes(mod.Baetidae.2, 
+                 # for which variable do you want to have the marginal effect?
+                 variable = "Flow", 
+                 # which is the interacting variable?
+                 by = "Salinity", 
+                 # on the link scale
+                 type = "link", 
+                 # to surpress warnings
+                 re.form = NA)
+marginal.effects.log
+```
+
+With the logarithmic link function, the marginal effects are log response ratios. We can translate to response ratios:
+
+```{r}
+marginal.effects.log |> 
+    mutate(response.ratio = exp(estimate)) |>
+    select(Salinity, response.ratio) |>
+    as_tibble()
+```
+
+So, given control conditions for salt, switching from normal to reduced flow velocity results in 82.2% of the Baetid mayflies remaining. With salt, only 50.3 % of the mayflies that are present with normal flow velocity are predicted to remain with reduced flow velocity. 
+
+## Exercise 6
+
+Use *slopes()* to calculate the effect of flow velocity (as absolute difference between control and treatment) for no-salt and salt conditions. You have to refer to the model with identity link for this. What would we expect if the simple addition null model was true?
+
+```{r}
+# Your place for coding :)
+```
+
+## Marginal effects plot
+
+Now, we create a marginal effects plot using ggplot. We can use *geom_hline()* to add a reference line for no effect. We add the confidence limits for the marginal effects estimates with *geom_errorbar()*.
+
+Here, we do this for the multiplicative null model, relying on the regression model with log-link:
+
+```{r}
+# Marginal effects plot on link scale
+ggplot(marginal.effects.log, aes(x = Salinity, y = estimate)) + 
+    geom_point() + 
+    geom_line(group = c(1,1)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2) +
+    labs(y = "Effect of flow velocity reduction (log(Response Ratio))")
+```
+
+
+## Exercise 7
+
+Create a marginal effects plot for the identity-link-model.
+
+```{r}
+# Your place for coding :)
+```
+
+## Slopes() for direct testing of null models
+
+In fact, the *slopes()* function can also be used as a direct way to test the simple addition null model when the logarithmic link function has been used. This is the more robust approach compared to changing from the canonical logarithmic link function to the non-canonical identity link, which can sometimes cause failure for model fitting and will result in inaccurate confidence intervals for count data. What you need to do in this case is:
+
+(1) Change from scale = "link" to scale = "response". Now, the slope of the line connecting model predictions on the response scale is estimated instead of the link scale.
+
+```{r}
+slopes(mod.Baetidae.2,
+       variable = "Flow", 
+       by = "Salinity", 
+       # change to response scale
+       type = "response",
+       re.form = NA)
+```
+
+This shows that a reduction in flow velocity results in a loss of 3.75 individuals given no salt conditions, but in a loss of 9.37 individuals given salt conditions.
+
+(2) Specify a hypothesis. We can do this in various ways, e.g., by writing: hypothesis = "b2 - b1 = 0". This estimates how much larger (or smaller, if negative) the slope is under salt conditions (the second row of the *slopes()* output, therefore b2) compared to no salt conditions (first row of the output, b1). Compare also with the statistical results from the ANOVA output from the identity link function.
+
+```{r, message = F}
+slopes.simple.addition <- slopes(mod.Baetidae.2,
+       variable = "Flow", 
+       by = "Salinity", 
+       type = "response",
+       re.form = NA, 
+       hypothesis = "b2 - b1 = 0")
+
+slopes.simple.addition
+```
+
+This shows that with the second stressor (salinity) being present, too, 5.62 individuals more are lost due to reduced flow velocity compared to the single stressor effect of reduced flow velocity. However, the p-value indicates that this is far from being statistically significant.
+
+```{r}
+Anova(mod.Baetidae.2.identity)
+```
+
+The statistical conclusion and even the p-values are (almost) identical between the two approaches here. This is often the case if we have only factorial predictors.
+
+## Bonus exercise
+
+Now, take the original table (df.factorial) and test if the stressors sediment addition and reduced flow velocity interact in affecting the abundance of the mayfly family Heptageniidae. 
+
+1) For this exercise, first filter the table for those mesocosms where no salt was added. 
+
+2) Fit a poisson regression model with the formula Heptageniidae ~ Sediment * Flow. 
+
+3) Perform residual diagnostics to decide if you need to adapt the regression model by moving to a negative binomial distribution. 
+
+4) Interpret the *Anova()* output concerning the multiplicative null model. 
+
+5) Then, use the slopes() function to test the simple addition null model.
+
+6) Finally, create a marginal effects plot for each of the two null models.
+
+```{r}
+# Your place for coding :)
+```
+
+# Further reading
+
+Arel-Bundock V, Greifer N, Heiss A (2024). “How to Interpret Statistical Models Using marginaleffects for R and Python.” Journal of Statistical Software, 111(9), 1-32. doi:10.18637/jss.v111.i09 https://doi.org/10.18637/jss.v111.i09.
+
+(and the online book: https://marginaleffects.com/)
+
+Duncan, R. P., & Kefford, B. J. (2021). Interactions in statistical models: Three things to know. Methods in Ecology and Evolution, 12, 2287–2297.
+
+Jarvis, L., Rosenfeld, J., Gonzalez-Espinosa, P. C., & Enders, E. C. (2024). A process framework for integrating stressor-response functions into cumulative effects models. Science of The Total Environment, 906, 167456.
+
+Madge Pimentel, I., Albini, D., Beermann, A. J., Leese, F., Macaulay, S. J., Matthaei, C. D., ... & Schäfer, R. B. (2025). Hypothesis‐Driven Research on Multiple Stressors: An Analytical Framework for Stressor Interactions. Ecology and evolution, 15(8), e71959.
+
+Schäfer, R. B., & Piggott, J. J. (2018). Advancing understanding and prediction in multiple stressor research through a mechanistic basis for null models. Global Change Biology, 24, 1817–1826.
+
+Spake, R., Bowler, D. E., Callaghan, C. T., Blowes, S. A., Doncaster, C. P., Antão, L. H., Nakagawa, S., McElreath, R., & Chase, J. M. (2023). Understanding ‘it depends’ in ecology: A guide to hypothesising, visualising and interpreting statistical interactions. Biological Reviews, brv.12939.
+
+Vinebrooke, R. D., Cottingham, K. L., Scheffer, J. N., Marten, Dodson, S. I., Maberly, S. C., & Sommer, U. (2004). Impacts of multiple stressors on biodiversity and ecosystem functioning: The role of species co-tolerance. Oikos, 104, 451–457.
