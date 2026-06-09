@@ -1,0 +1,338 @@
+---
+title: "Exercise_GLM"
+author: "Hanh & Verena"
+format: html
+editor: visual
+toc: true
+toc-depth: 4
+number-sections: true
+editor_options: 
+  chunk_output_type: console
+---
+
+# Exercise for lecture 3 - GLM {.unnumbered}
+
+The main reference, where we also got the data from are:
+
+-   Zuur et al. (2009). Mixed Effects Models and Extensions in Ecology with R\
+-   <https:://www.highstat.com>
+
+# Load packages
+
+```{r}
+library(dplyr) 
+library(lattice)
+library(MASS)
+```
+
+# Exercise 1 - Binomial GLM for presence - absence data
+
+Load data
+
+```{r}
+Tb_data <- read.table("Boar.txt", header = TRUE, sep = "\t")
+```
+
+Data source within Zuur et al. (2009): Vicente et al. (2006)
+
+Data check
+
+```{r}
+glimpse(Tb_data)
+summary(Tb_data)
+```
+
+Remove NA in response and predictor variables
+
+```{r}
+Tb_data_clean <- Tb_data %>% 
+  filter(!is.na(Tb) & !is.na(LengthCT))
+```
+
+## Plot relatinoship between Tb ratio vs organism length (LengthCT)
+
+```{r}
+par(mfrow = c(1, 2)) # plot two sub plots in one 
+
+boxplot(Tb_data_clean$LengthCT ~ Tb_data_clean$Tb, 
+        xlab = "Tuberculosis",
+        ylab = "Length",
+        main = "(a) Boxplot version",
+        border = "black")
+
+plot(Tb_data_clean$LengthCT, Tb_data_clean$Tb, 
+     xlab = "Length", 
+     ylab = "Tuberculosis", 
+     main = "(b) Scatterplot version",
+     pch = 1, col = "black")
+
+abline(lm(Tb ~ LengthCT, data = Tb_data_clean), col = "red", lwd = 2) # add linear line
+par(mfrow = c(1, 1))
+```
+
+## Linear regression
+
+```{r}
+lm_model <- lm(Tb ~ LengthCT, data = Tb_data_clean)
+
+summary(lm_model)
+```
+
+Model validation plots, with four subplots
+
+```{r}
+par(mfrow = c(2, 2))
+plot(lm_model) 
+par(mfrow = c(1, 1))
+```
+
+## Generalized linear regression
+
+```{r}
+glm_model <- glm(Tb ~ LengthCT, family = binomial, data = Tb_data_clean)
+
+summary(glm_model)
+```
+
+Model validation plots, with four subplots
+
+```{r}
+par(mfrow = c(2, 2))
+plot(glm_model)
+par(mfrow = c(1, 1))
+```
+
+ToDo:\
+\* Compare the validation plits between the LM and the GLM?\
+
+### Plot: GLM predictions
+
+```{r}
+New_data <- data.frame(LengthCT = seq(from = 46.5, to = 165, by = 1)) # create subset of data
+Predicted_data <- predict(glm_model, newdata = New_data, type = "response") # get predicted data from model
+
+plot(Tb_data_clean$LengthCT, Tb_data_clean$Tb, 
+     xlab = "Length", 
+     ylab = "Probability of Tb",
+     main = "GLM Fit",
+     pch = 1, col = "black")
+lines(New_data$LengthCT, Predicted_data, lwd = 2, col = "blue") # add model fit line (non-linear)
+```
+
+# Exercise 2 - Poisson GLM for count data
+
+Load data
+
+```{r}
+RK_data <- read.table("RoadKills.txt", header = TRUE, sep = "\t")
+```
+
+Data check
+
+```{r}
+glimpse(RK_data)
+summary(RK_data)
+names(RK_data)
+```
+
+Sampling locations of amphibian kills along the road
+
+```{r}
+xyplot(Y ~ X, aspect = "iso", col = 1, pch = 16, data = RK_data)
+```
+
+## Plot number of amphibian kills (TOT.N) versus distance to the park (D.PARK)
+
+```{r}
+plot(RK_data$D.PARK ~ RK_data$TOT.N,
+     xlab="Distance to park (m)",
+     ylab="Road kills")
+```
+
+## Linear regression
+
+```{r}
+Model_1 <- lm(TOT.N ~ D.PARK,data=RK_data)
+summary(Model_1) 
+```
+
+Model validation plots, with four subplots
+
+```{r}
+par(mfrow = c(2, 2))
+plot(Model_1)
+par(mfrow = c(1, 1))
+```
+
+ToDo:\
+\* Which model violations do you see?\
+
+## Generalized linear model
+
+```{r}
+Model_2<-glm(TOT.N ~ D.PARK,family=poisson,data=RK_data)
+summary(Model_2)
+```
+
+Model validation plots, with four subplots
+
+```{r}
+par(mfrow = c(2, 2))
+plot(Model_2)
+par(mfrow = c(1, 1))
+```
+
+Model evaluation, check for dispersal
+
+```{r}
+dispersion_poisson <- sum(residuals(Model_2, type = "pearson")^2) / df.residual(Model_2)
+dispersion_poisson
+```
+
+Dispersion = 1 (fine)
+
+If Dispersion \> 1.5 (Poisson assumption violated - Overdispersion) --\> Model not complex enough. large parts of variability not explained!
+
+Model predictions
+
+```{r}
+MyData <- data.frame(D.PARK = seq(from = 0, to = 25000, by = 1000))
+pred <- predict(Model_2, newdata = MyData, type = "link", se.fit = TRUE)
+```
+
+Predicted values converted on the scale of response variable
+
+```{r}
+fit <- exp(pred$fit)
+```
+
+Add upper and lower confidence intervals
+
+```{r}
+upper <- exp(pred$fit + 1.96 * pred$se.fit)
+lower <- exp(pred$fit - 1.96 * pred$se.fit)
+```
+
+### Plot GLM with 95% confidence interval
+
+```{r}
+plot(RK_data$D.PARK, RK_data$TOT.N,
+     xlab = "Distance to Park (m)",
+     ylab = "Road Kills",
+     pch = 1, col = "black")
+lines(MyData$D.PARK, fit, lty = 1, lwd = 2, col = "darkblue")        # Predicted mean
+lines(MyData$D.PARK, upper, lty = 2, col = "blue")                   # Upper CI
+lines(MyData$D.PARK, lower, lty = 2, col = "blue")                    # Lower CI
+```
+
+# Exercise 3 - Negative binomial GLM for count data
+
+More realistic model: Add explanatory variables
+
+transform data to sqrt
+
+```{r}
+RK_data$SQ.POLIC<-sqrt(RK_data$POLIC)
+RK_data$SQ.WATRES<-sqrt(RK_data$WAT.RES)
+RK_data$SQ.URBAN<-sqrt(RK_data$URBAN)
+RK_data$SQ.OLIVE<-sqrt(RK_data$OLIVE)
+RK_data$SQ.LPROAD<-sqrt(RK_data$L.P.ROAD)
+RK_data$SQ.SHRUB<-sqrt(RK_data$SHRUB)
+RK_data$SQ.DWATCOUR<-sqrt(RK_data$D.WAT.COUR)
+```
+
+create GLM model with poisson family
+
+```{r}
+Model_3 <-glm(TOT.N~D.PARK+OPEN.L+MONT.S+SQ.POLIC+
+          SQ.SHRUB+SQ.WATRES+L.WAT.C+SQ.LPROAD+
+          SQ.DWATCOUR,family=poisson,data=RK_data)
+```
+
+check model output, compare Model_2 and Model_3
+
+```{r}
+drop1(Model_3,test="Chi") # drop explanatory variable
+AIC(Model_2, Model_3)     # Lower Akaike Information Criterion (AIC) of Model_3 indicates better fit model
+summary(Model_3)          # Potential issue: "Dispersion parameter"
+```
+
+Check Dispersion
+
+```{r}
+dispersion_poisson <- sum(residuals(Model_3, type = "pearson")^2) / df.residual(Model_3)
+dispersion_poisson
+```
+
+Model still shows overdispersal solution for overdispersed poisson distributed data? -\> use negative binominal distribution
+
+## Negative binomial model
+
+```{r}
+Model_4 <-glm.nb(TOT.N ~ D.PARK+OPEN.L+MONT.S+SQ.POLIC+
+             SQ.SHRUB+SQ.WATRES+L.WAT.C+SQ.LPROAD+
+             SQ.DWATCOUR,link="log",data=RK_data)
+summary(Model_4)
+```
+
+Check Dispersion
+
+```{r}
+dispersion_poisson <- sum(residuals(Model_4, type = "pearson")^2) / df.residual(Model_4)
+dispersion_poisson
+```
+
+no overdispersal
+
+compare Model_2, Model_3 and Model_4
+
+```{r}
+AIC(Model_2, Model_3, Model_4)
+```
+
+Lower Akaike Information Criterion (AIC) of Model_4 indicates best fit model
+
+check model performance
+
+```{r}
+par(mfrow=c(2,2))
+plot(Model_4)
+par(mfrow = c(1, 1))
+```
+
+# Exercise 4 - abundance in a mesocosm study
+
+some data on a mesocosm study, where we studied drought
+
+read in data
+
+```{r}
+drought <- read.table("data_drought.csv", 
+                      header = TRUE, 
+                      sep = ";", 
+                      na.strings = c("NR", "NA"))
+```
+
+Investigate effects of different drought scenarios (treatment) on abundance of macroinvertebrates
+
+histogram of reponse variable
+
+```{r}
+## Abundance
+hist(drought$abundance)
+
+```
+
+fit a linear model
+
+```{r}
+lm_model_drought <- lm(abundance ~ treatment, data = drought)
+par(mfrow = c(2, 2))
+plot(lm_model_drought)
+par(mfrow = c(1, 1))
+```
+
+ToDo:\
+\* Which model violations do you recognise?\
+\* What would be your approach to solve this problem?\
+\* Please fit a suitable model and check the model fit again. 
