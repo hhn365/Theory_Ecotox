@@ -1,4 +1,4 @@
-# Theory_Ecotox
+# Theoretical Ecotoxicology
 Lecture materials for the M.Sc. course Theoretical Ecotoxicology: Concepts and Applications
 
 University Duisburg-Essen, 2026
