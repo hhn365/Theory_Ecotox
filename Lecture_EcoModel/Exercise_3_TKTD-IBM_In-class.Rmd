@@ -16,7 +16,7 @@ output:
 The exercise provides the script to run an example of a coupled **TKTD-IBM** model:
 a toxicokinetic-toxicodynamic damage model feeding **DEBtox** (sublethal) and **GUTS** (lethal) 
 effects into an IBM. This is different to the *original* Vlaeminck et al. (2021) model, which is
-a full DEB-IBM. This exercise includes their exact toxicology values, but simplifies the energy budget.
+a full NetLogo DEB-IBM. This exercise includes their exact toxicology values, but simplifies the energy budget.
 Implementation for teaching purposes only.
 
 **Reference.** Vlaeminck K., Viaene K.P.J., Van Sprang P., De Schamphelaere K.A.C. (2021). *Development and
