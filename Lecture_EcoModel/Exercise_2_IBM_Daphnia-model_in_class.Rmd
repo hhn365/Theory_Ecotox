@@ -74,7 +74,7 @@ ibm_daphnia <- new(..................,   # Built-in class
                     eggage = ..),      # d, age of the current egg clutch 
   
   # Simulation time (from day 0 to day 60, time step = 1 day)
-  times = c(from = ..., to = ..., by = ...),   
+  times = c(from = ....., to = ....., by = .....),   
   
   # Solver 
   solver = "myiteration",          # own customer solver (defined in the next chunk)
@@ -141,10 +141,10 @@ equations(.............) <- list(
   #3- Hatching of new neonates 
   hatch = function(inds, parms) {
     with(parms, {
-      edt <- bottrell(temp)                                  # egg development time
-      have.neo <- which(inds$eggs >... & inds$eggage > ...)  # conditions: have eggs that finished developing
-      eggs <- inds$eggs[have.neo]                            # eggs carried by those satisfying above conditions
-      new.neo <- sum(eggs)                                   # total neonates born
+      edt <- bottrell(temp)                                      # egg development time
+      have.neo <- which(inds$eggs >..... & inds$eggage > .....)  # conditions: have eggs that finished developing
+      eggs <- inds$eggs[have.neo]                                # eggs carried by those satisfying above conditions
+      new.neo <- sum(eggs)                                       # total neonates born
 
       inds$eggs[have.neo] <- inds$eggage[have.neo] <- 0      # clutches released, egg and eggage reset to 0
       newinds <- newdaphnia(L_0, new.neo)                    # newborns
@@ -161,9 +161,9 @@ The model uses a custom iterator solver for the IBM-Daphnia model.
 ```{r solver}
 myiteration <- function(y, ...) {
   observer <- function(res) {
-    c(number = nrow(res),          # number of individuals in the population
+    c(number = nrow(res),             # number of individuals in the population
       meansize = mean(res$.......),   # mean size of individuals in the population
-      meanage = mean(res$........),     # mean age of individuals in the population
+      meanage = mean(res$........),   # mean age of individuals in the population
       meaneggs = mean(res$.......))   # mean eggs per individual
   }
 
@@ -272,13 +272,13 @@ Sc1 <- Sc2 <- Sc3 <- .......
 
 # Scenario-specific mortality functions
 # No mortality
-equations(Sc0)$fmort <- function(mort, x) ...
+equations(Sc0)$fmort <- function(mort, x) .....
 # Constant mortality
-equations(Sc1)$fmort <- function(mort, x) ...
+equations(Sc1)$fmort <- function(mort, x) .....
 # Small individuals die more
-equations(Sc2)$fmort <- function(mort, x) ... * 2 * rank(-x)/(length(x)+1)  
+equations(Sc2)$fmort <- function(mort, x) ..... * 2 * rank(-x)/(length(x)+1)  
 # Large individuals die more
-equations(Sc3)$fmort <- function(mort, x) ... * 2 * rank(x)/(length(x)+1) 
+equations(Sc3)$fmort <- function(mort, x) ..... * 2 * rank(x)/(length(x)+1) 
 ```
 
 ### Scenario Simulations
