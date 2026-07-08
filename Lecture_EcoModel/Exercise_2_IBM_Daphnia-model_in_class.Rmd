@@ -9,10 +9,6 @@ output:
     toc_float: true
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 ## Introduction
 
 This document presents an Individual-Based Model (IBM) for Daphnia population dynamics using the simecol package in R. The model simulates growth and egg production, mortality, and hatching processes in Daphnia populations.
@@ -209,7 +205,7 @@ head(ibm_daphnia@out)
 
 Visualize the Daphnia population abundance patterns over time.
 
-```{r abundance-plots, fig.width=10, fig.height=5}
+```{r abundance-plots}
 par(mfrow = c(1, 2))
 plot(ibm_daphnia@out[,1],ibm_daphnia@out[,2], 
      xlab="Time", ylab="Abundance",  
@@ -234,7 +230,7 @@ setMethod("plot", c("indbasedModel", "missing"), function(x, y, ...) {
 })
 ```
 
-```{r custom-plots, fig.width=10, fig.height=8}
+```{r custom-plots}
 plot(ibm_daphnia)
 ```
 
@@ -291,7 +287,7 @@ results <- lapply(scenarios, sim)
 
 ### Scenario Results Visualization
 
-```{r scenario-plots, fig.width=10, fig.height=6}
+```{r scenario-plots}
 # Plot scenario results
 par(mfrow = c(1,1))
 
