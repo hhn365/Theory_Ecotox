@@ -1,0 +1,60 @@
+---
+title: "Population growth model"
+subtitle: "A simple introduction before the individual-based and TKTD-IBM exercises"
+author: "Source: https://hankstevens.github.io/Primer-of-Ecology"
+date: "2026-07-08"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+# Load the library
+# install.packages("simecol")
+
+```{r libraries}
+library(simecol)   
+```
+
+# The model
+
+```{r model}
+dens_dep <- new("odeModel",
+    main = function(time, init, parms) {          
+        with(as.list(c(init, parms)), {           
+            dN.dt <- ................................      
+            list(c(dN.dt))                        
+        })
+    },
+    parms  = c(..........., ...........),             
+    times  = c(..........., ..........., ...........),        
+    init   = c(...........),                             
+    solver = ...........                               
+)
+```
+
+# Run the model
+
+```{r run}
+result_ddep <- sim(dens_dep)   
+```
+
+# Model results
+
+```{r results}
+print(result_ddep, all = FALSE)   
+```
+
+# Plot the trajectory
+
+```{r plot, fig.width=7, fig.height=5}
+plot(result_ddep@out[ , 1], result_ddep@out[ , 2],   
+     las = 1, type = "l", lwd = 2,
+     xlab = "Time", ylab = "N")
+```
+
+# Exercise
+
+> **Manipulate `r` and `alpha`, and see how the model reacts.**
+

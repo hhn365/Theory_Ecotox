@@ -1,0 +1,323 @@
+---
+title: "IBM-Daphnia-model"
+author: "Based on Petzoldt & Rinke (2007)"
+date: "2026-07-08"
+output: 
+  html_document: 
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This document presents an Individual-Based Model (IBM) for Daphnia population dynamics using the simecol package in R. The model simulates growth and egg production, mortality, and hatching processes in Daphnia populations.
+
+**Reference:** Petzoldt & Rinke (2007) simecol: An Object-Oriented Framework for Ecological Modeling in R. Journal of Statistical Software. <https://www.jstatsoft.org/v22/i09>.
+
+## Load Libraries
+
+```{r libraries}
+library(.............)
+```
+
+## IBM-Daphnia Model Setup
+
+The IBM-Daphnia model is implemented as a simecol object with three main processes: growth and egg production, mortality, and hatching of neonates. 
+
+```{r model-setup}
+# A simecol object
+ibm_daphnia <- new(..................,   # Built-in class
+  main = function(time, init, parms) {
+    # Three main processes per time step
+    init <- .......(init, parms)         # Growth and egg production
+    init <- .......(init, parms)         # Mortality 
+    init <- .......(init, parms)         # Hatching of new neonates
+    init                              
+  },
+
+  # Model parameters (constants)
+  parms = list(
+    # Growth parameters 
+    a1 = 1.167,        # mm, max size gain from food
+    a2 = 0.573,        # mg/L, half-saturation food level
+    a3 = 1.420,        # mm, baseline asymptotic size offset
+    a4 = 2.397,        # d, term linking growth rate to max individual size
+    b1 = 1.089e-2,     # d^-1, growth-rate coefficient
+    b2 = 0.122,        # 1/°C, growth rate sensitivity to temperature
+
+    # Clutch size parameters 
+    X_max_slope = 23.83,     # eggs, max slope of eggs
+    K_s_slope   = 0.65,      # mg/L, half-saturation food level
+    beta_min    = -29.28,    # eggs, negative intercept 
+    u_c         = 1,         # L/mg, food effect on clutch
+
+    # IBM model parameters
+    L_0_Hall = 0.35,   # mm, size of neonates (reference of Hall data) 
+    L_0      = ....,   # mm, size of neonates at birth (in this model)
+    SAM      = ....,   # mm, size at maturity (SAM, below this threshold: no reproduction)
+    maxage   = ....,     # d, baseline death age
+
+    # Environmental conditions
+    temp = ......,         # °C, water temperature
+    food = .......         # mg/L, food (algae) concentration 
+  ),
+
+  # The starting population
+  init = data.frame(age = .....,       # d, age of a newborn neonate
+                    size = ....,       # mm, size of a newborn neonate  
+                    eggs = ....,       # eggs carried in brood pouch
+                    eggage = ..),      # d, age of the current egg clutch 
+  
+  # Simulation time (from day 0 to day 60, time step = 1 day)
+  times = c(from = ..., to = ..., by = ...),   
+  
+  # Solver 
+  solver = "myiteration",          # own customer solver (defined in the next chunk)
+  
+  # Equations for live, survive, and hatching processes 
+  equations = list()               # empty list (filled in the next chunk)
+)
+```
+
+## Model Equations
+
+The `equations` slot holds functions, that are called by the model in each time step: the growth and egg reproduction (`tefi`), the egg-development (`bottrell`), the neonate (`newdaphnia`), and the three processes (`live`, `survive`, `hatch`).
+
+```{r equations}
+equations(.............) <- list(
+  # New neonates: build new offspring rows
+  newdaphnia = function(SON, n) {       # create n new neonates, each of size SON (size of neonate)
+    if (n > 0) {                        # If condition: only if at least 1 egg hatched
+      data.frame(age = rep(0, n),       # newborn at age = 0
+                 size = SON,            # born at size L_0
+                 eggs = 0,              # carry no egg yet
+                 eggage = 0)            # no clutch yet
+    } else {
+      NULL
+      }
+  },
+
+  # Egg development time as function of temperature 
+  bottrell = function(temp) {           # Bontrell function: number of days eggs needs to develop before hatching
+    exp(3.3956 + 0.2193 * log(temp) - 0.3414 * log(temp)^2)
+  },
+
+  # Temperature-Food Interaction model (TeFI)
+  tefi = function(time, temp, food, parms){
+    with(parms, {
+      deltaL <- L_0 - L_0_Hall
+      k <- b1 * exp(b2 * temp)                                      # Growth rate k rises with temperature
+      L_max <- (a1 * food)/(a2 + food) + a3 - k * a4                # Max body size L_max. Food enters as a saturating Michaelis-Mentel term.          
+      L <- L_max - (L_max - L_0_Hall) * exp (-k * time) + deltaL    # Length L approaches L_max over time
+      E <- (X_max_slope * food)/(K_s_slope + food) * L + beta_min * (1 - exp(-u_c * food))  # Clutch size E as function of food and body length
+
+      as.data.frame(cbind(L, E))
+    })
+  },
+
+  #1 - Individual growth and egg production
+  live = function(inds, parms){
+    with(parms,{
+      inds$age <- inds$age + DELTAT
+      inds$eggage <- ifelse(inds$size > ...... & inds$eggs > ........, inds$eggage + DELTAT, 0)
+
+      tefi_out <- tefi(inds$age, temp, food, parms)
+      inds$size <- tefi_out$L
+      neweggs <- round(tefi_out$E)
+
+      inds$eggs <- ifelse(inds$size > ......... & inds$eggage == ......., neweggs, inds$eggs)
+      ........
+    })
+  },
+
+  #2- Mortality 
+  survive = function(inds, parms) subset(inds, inds$age < ..........),
+
+  #3- Hatching of new neonates 
+  hatch = function(inds, parms) {
+    with(parms, {
+      edt <- bottrell(temp)                                  # egg development time
+      have.neo <- which(inds$eggs >... & inds$eggage > ...)  # conditions: have eggs that finished developing
+      eggs <- inds$eggs[have.neo]                            # eggs carried by those satisfying above conditions
+      new.neo <- sum(eggs)                                   # total neonates born
+
+      inds$eggs[have.neo] <- inds$eggage[have.neo] <- 0      # clutches released, egg and eggage reset to 0
+      newinds <- newdaphnia(L_0, new.neo)                    # newborns
+      rbind(inds, .......)                                   # newborns are added to the population
+    })
+  }
+)
+```
+
+## Custom Solver
+
+The model uses a custom iterator solver for the IBM-Daphnia model.
+
+```{r solver}
+myiteration <- function(y, ...) {
+  observer <- function(res) {
+    c(number = nrow(res),          # number of individuals in the population
+      meansize = mean(res$.......),   # mean size of individuals in the population
+      meanage = mean(res$........),     # mean age of individuals in the population
+      meaneggs = mean(res$.......))   # mean eggs per individual
+  }
+
+  init <- y@init
+  times <- fromtoby(y@times)
+  func <- y@main
+  parms <- y@parms
+  equations <- y@equations
+  equations <- addtoenv(equations)
+  environment(func) <- environment()
+  parms$DELTAT <- 0
+  res <- observer(init)
+  out <- res
+
+  for (i in 2:length(times)) {
+    time <- times[i]
+    parms$DELTAT <- times[i] - times[i - 1]
+    init <- func(time, init, parms)
+    res <- observer(init)
+    out <- rbind(out, res)
+  }
+
+  row.names(out) <- NULL
+  out <- cbind(times, out)
+  as.data.frame(out)
+}
+```
+
+## Model Simulation
+
+Run the IBM-Daphnia model simulation using sim(simObj) and examine the results.
+
+```{r simulation}
+# Model simulation
+ibm_daphnia <- sim(.........)
+
+# Model results
+head(ibm_daphnia@out)
+
+```
+
+## Population Abundance Patterns
+
+Visualize the Daphnia population abundance patterns over time.
+
+```{r abundance-plots, fig.width=10, fig.height=5}
+par(mfrow = c(1, 2))
+plot(ibm_daphnia@out[,1],ibm_daphnia@out[,2], 
+     xlab="Time", ylab="Abundance",  
+     type="l", col = "darkgreen", lty=2, lwd=2)
+plot(ibm_daphnia@out[,1],ibm_daphnia@out[,2], 
+     xlab="Time", ylab="log (Abundance)", log = "y", 
+     type="l", col = "blue", lty=2, lwd=2)
+```
+
+## Custom Plot Method
+
+Create a custom plot method for the individual-based model that shows age, eggs, and abundance patterns.
+
+```{r custom-plot-method}
+setMethod("plot", c("indbasedModel", "missing"), function(x, y, ...) {
+  o <- out(x)
+  par(mfrow = c(2, 2))
+  plot(o$times, o$meanage, type = "l", xlab = "Time", ylab = "Mean age (d)", ylim=c(0,12), col = "grey", lty=1, lwd=2)
+  plot(o$times, o$meaneggs, type = "l", xlab = "Time", ylab = "Eggs per individual", ylim=c(0,5), col = "orange", lty=1, lwd=2)
+  plot(o$times, o$number, type = "l", xlab = "Time", ylab = "Abundance", col = "darkgreen", lty=1, lwd=2)
+  plot(o$times, o$number, type = "l", xlab = "Time", ylab = "Abundance (log scale)", log = "y", col = "blue", lty=1, lwd=2)
+})
+```
+
+```{r custom-plots, fig.width=10, fig.height=8}
+plot(ibm_daphnia)
+```
+
+## Mortality Scenarios: Size-Selective Predation
+
+### Scenario Setup
+
+We examine four different mortality scenarios:
+
+-   **Sc0**: No mortality (baseline case with maximum growth potential)
+-   **Sc1**: Random mortality (constant per capita mortality, independent of prey size)
+-   **Sc2**: Size-selective mortality (small individuals preferred - invertebrate-like predation)
+-   **Sc3**: Size-selective mortality (large individuals preferred - fish-like predation)
+
+**Main hypothesis:** Predators preferring large Daphnia preys increases Daphnia population mortality more than non-selective (random) predation.
+
+```{r scenario-setup}
+# Setup for all three scenarios
+...... <- ibm_daphnia
+times(Sc0) <- c(from = 0, to = 30, by = 0.2)
+parms(Sc0)[c("temp", "food", "mort")] <- c(15, 0.4, 0.1)  # Added 'mort' to parms
+init(Sc0) <- data.frame(age = rep(10, 50), size = rep(2.5, 50),
+                        eggs = rep(5, 50), eggage = runif(50, 0, 4))
+
+# Replace default survive function with user-defined size-dependent mortality function fmort 
+equations(Sc0)$survive <- function(inds, parms) {
+  abundance <- nrow(inds)
+  rnd <- runif(abundance)
+  mort <- fmort(parms$mort, inds$size) * parms$DELTAT
+  subset(inds, rnd > mort)
+}
+
+# Define mortality (fmort functions) for three scenarios (with shared Sc0 setup, but differ in fmort())
+Sc1 <- Sc2 <- Sc3 <- .......
+
+# Scenario-specific mortality functions
+# No mortality
+equations(Sc0)$fmort <- function(mort, x) ...
+# Constant mortality
+equations(Sc1)$fmort <- function(mort, x) ...
+# Small individuals die more
+equations(Sc2)$fmort <- function(mort, x) ... * 2 * rank(-x)/(length(x)+1)  
+# Large individuals die more
+equations(Sc3)$fmort <- function(mort, x) ... * 2 * rank(x)/(length(x)+1) 
+```
+
+### Scenario Simulations
+
+```{r scenario-simulations}
+# Run simulations for scenarios
+scenarios <- list(Sc0 = Sc0, Sc1 = Sc1, Sc2 = Sc2, Sc3 = Sc3)
+results <- lapply(scenarios, sim)
+```
+
+### Scenario Results Visualization
+
+```{r scenario-plots, fig.width=10, fig.height=6}
+# Plot scenario results
+par(mfrow = c(1,1))
+
+colors <- c("black", "blue", "orange", "red")
+labels <- c("Sc0: No mortality", "Sc1: Random mortality", 
+            "Sc2: Small prey preferred", "Sc3: Large prey preferred")
+
+plot(NULL, xlim = c(0, 30), ylim = c(10, 5000), log = "y",
+     xlab = "Time (days)", ylab = "Abundance (log scale)", main = "Daphnia IBM: Mortality Scenarios")
+for (i in 1:4) {
+  lines(out(results[[i]])$times, out(results[[i]])$number, col = colors[i], lwd = 2)
+}
+legend("topleft", legend = labels, col = colors, lty = 1, lwd = 2)
+```
+
+## Questions
+
+### Question 1: Compare results of different scenarios Sc0 to Sc4
+
+-   **Sc0 (No mortality):** [Add your answer here]
+-   **Sc1 (Random mortality):** [Add your answer here]
+-   **Sc2 (Small prey preferred):** [Add your answer here]
+-   **Sc3 (Large prey preferred):** [Add your answer here]
+
+### Question 2: Hypothesis Testing
+
+Does the scenario results support the hypothesis that size-selective predation targeting adults leads to stronger population suppression?
+
+[Add your answer here]
