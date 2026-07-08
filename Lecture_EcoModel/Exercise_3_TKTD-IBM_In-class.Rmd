@@ -1,0 +1,430 @@
+---
+title: "TKTD-IBM Exercise — Copper Effects on a *Daphnia* population"
+subtitle: "Coupled TKTD - IBM Daphnia magna model: DEBtox (sublethal) + GUTS (lethal)"
+author: "Based on open data from Vlaeminck et al. (2021) *Environ Toxicol Chem* 40:513-527, doi:10.1002/etc.4946"
+date: "2026"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+    number_sections: true
+
+---
+## Introduction
+
+The exercise provides the script to run an example of a coupled **TKTD-IBM** model:
+a toxicokinetic-toxicodynamic damage model feeding **DEBtox** (sublethal) and **GUTS** (lethal) 
+effects into an IBM. This is different to the *original* Vlaeminck et al. (2021) model, which is
+a full DEB-IBM. This exercise includes their exact toxicology values, but simplifies the energy budget.
+Implementation for teaching purposes only.
+
+**Reference.** Vlaeminck K., Viaene K.P.J., Van Sprang P., De Schamphelaere K.A.C. (2021). *Development and
+Validation of a Mixture Toxicity Implementation in the Dynamic Energy Budget–Individual-Based Model:
+Effects of Copper and Zinc on Daphnia magna Populations.* Environ Toxicol Chem 40(2):513–527.
+doi:10.1002/etc.4946.
+
+**Data availability.** The `.xlsx` files used in this exercise are subsets of the full
+supplementary dataset for Vlaeminck et al. (2021). Full deposited dataset (8 parts, Figshare):
+https://doi.org/10.6084/m9.figshare.11799198; https://doi.org/10.6084/m9.figshare.11799342; 
+https://doi.org/10.6084/m9.figshare.11799357; https://doi.org/10.6084/m9.figshare.11799612; https://doi.org/10.6084/m9.figshare.11799735; https://doi.org/10.6084/m9.figshare.11799768; https://doi.org/10.6084/m9.figshare.11799804; https://doi.org/10.6084/m9.figshare.11799864. 
+
+## Research questions
+
+1. **Sublethal (DEBtox):** How does copper, by **reducing assimilation**, slow individual growth and reproduction of individuals, 
+   and how visible is that at the population level?
+2. **Lethal (GUTS):** Above a damage threshold, copper causes **stochastic death** of individuals. How does it affect population trajectory and structure?
+3. **Validation:** Do the IBM predictions, driven only by **independently calibrated** copper parameters, reproduce the **observed** population experiment?
+
+---
+
+# Load library
+
+```{r libraries}
+library("simecol")   
+library("readxl")    
+```
+
+---
+
+# DEBtox (sublethal): 
+
+```{r read-debtox}
+path_ind <- "SI_individual_experiment.xlsx"   
+pal <- c("#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e")  
+
+deb <- read_excel(path_ind, sheet = "DEBtox_calibration_data", skip = 8)
+names(deb)[1:6] <- c("Treatment", "Day", "Me.Conc", "Nom.Conc", "Reproduction", "Size")
+deb <- deb[, 1:6]
+deb <- deb[!is.na(deb$Treatment) & deb$Treatment != "-", ]
+deb$Day          <- as.numeric(deb$Day)
+deb$Me.Conc      <- as.numeric(deb$Me.Conc)
+deb$Reproduction <- suppressWarnings(as.numeric(deb$Reproduction))
+deb$Size         <- suppressWarnings(as.numeric(deb$Size))   
+
+ctrl     <- subset(deb, Treatment == "Control") 
+ctrl <- ctrl[order(ctrl$Day), ]
+cu_deb   <- subset(deb, Treatment == "Copper")
+cu_concs <- sort(unique(cu_deb$Me.Conc))        
+size0    <- ctrl$Size[ctrl$Day == 0] / 1000      
+
+par(mfrow = c(1, 2))
+plot(ctrl$Day, ctrl$Reproduction, type = "l", lwd = 2, col = "black",
+     xlab = "Time (days)", ylab = "Cumulative reproduction (#)",
+     main = "Sublethal: reproduction", ylim = c(0, 60))
+for (i in seq_along(cu_concs)) {
+  d <- subset(cu_deb, Me.Conc == cu_concs[i]); d <- d[order(d$Day), ]
+  lines(d$Day, d$Reproduction, col = pal[i], lwd = 2)
+}
+legend("topleft", legend = c("Control", paste0(cu_concs, " ug/L")),
+       col = c("black", pal), lwd = 2, bty = "n", cex = 0.8)
+
+# Body length (measured on days 0, 7, 14, 21 for control; for Cu lengths were only measured from day 7, 14, 21) 
+ctrl_g <- ctrl[!is.na(ctrl$Size), ]
+plot(ctrl_g$Day, ctrl_g$Size / 1000, type = "b", pch = 19, lwd = 2, col = "black",
+     xlab = "Time (days)", ylab = "Body length (mm)", ylim = c(0.5, 4),
+     main = "Sublethal: growth")
+for (i in seq_along(cu_concs)) {
+  d <- subset(cu_deb, Me.Conc == cu_concs[i]); d <- d[!is.na(d$Size), ]; d <- d[order(d$Day), ]
+  if (nrow(d) > 0) {                                  
+    xx <- c(0, d$Day); 
+    yy <- c(size0, d$Size / 1000)  
+    lines(xx, yy, type = "b", pch = 19, col = pal[i], lwd = 2)
+  }
+}
+legend("bottomright", legend = c("Control", paste0(cu_concs, " ug/L")),
+       col = c("black", pal), lwd = 2, bty = "n", cex = 0.75)
+```
+
+---
+
+# GUTS (lethal): 
+
+```{r read-guts}
+guts <- read_excel(path_ind, sheet = "GUTS_calibration_data", skip = 6)
+names(guts)[1:5] <- c("Treatment", "Day", "Me.Conc", "Nom.Conc", "Survival")
+guts <- guts[, 1:5]
+guts <- guts[!is.na(guts$Treatment) & guts$Treatment != "-", ]   
+guts$Day      <- as.numeric(guts$Day)
+guts$Me.Conc  <- as.numeric(guts$Me.Conc)
+guts$Survival <- as.numeric(guts$Survival)
+
+cu_surv <- subset(guts, Treatment == "Copper")   
+```
+
+```{r guts-function}
+# Damage Df builds toward Cw
+# Once it passes threshold zw the hazard H switches on.
+# Survival is exp(-H).
+guts_survival <- function(Cw, t, kD = 0.4057, zw = 38.235, bw = 1.0277e-2) {
+  tf <- seq(0, max(t), by = 1/24)                                  # hourly grid for the integral
+  Df <- Cw * (1 - exp(-kD * tf))                                   # analytical damage trajectory
+  hf <- bw * pmax(0, Df - zw)                                      # instantaneous hazard
+  H  <- c(0, cumsum((head(hf, -1) + tail(hf, -1)) / 2 * diff(tf))) # cumulative hazard 
+  approx(tf, exp(-H), xout = t)$y                                  # survival at requested days
+}
+```
+
+```{r guts-plot}
+plot(NULL, xlim = c(0, 21), ylim = c(0, 1),
+     xlab = "Time (days)", ylab = "Survival fraction",
+     main = "Observed survival (points) vs GUTS prediction (lines)")
+for (i in seq_along(cu_concs)) {
+  d <- subset(cu_surv, Me.Conc == cu_concs[i]); d <- d[order(d$Day), ]
+  points(d$Day, d$Survival, col = pal[i], pch = 19)               
+  tt <- seq(0, 21, by = 0.5)
+  lines(tt, guts_survival(cu_concs[i], tt), col = pal[i], lwd = 2) 
+}
+legend("bottomleft", legend = paste0(cu_concs, " ug/L"),
+       col = pal, pch = 19, lwd = 2, bty = "n", cex = 0.9)
+```
+
+---
+
+# Simplified (modified for teaching purpose) TKTD-IBM: 
+
+```{r model-object}
+ibm_cu <- new("indbasedModel",
+  main = function(time, init, parms) {
+    init <- live(init, parms)     # growth + egg production + (added) copper DAMAGE UPTAKE + (added) DEBtox
+    init <- survive(init, parms)  # (added) GUTS + (added) starvation + maximum age
+    init <- hatch(init, parms)    # neonates born (kept as in Exercise 2)
+    init
+  },
+
+  parms = list(
+    # Growth parameters 
+    a1 = 1.167, a2 = 0.573, a3 = 1.420, a4 = 2.397, b1 = 1.089e-2, b2 = 0.122,
+    # Clutch-size parameters 
+    X_max_slope = 23.83, K_s_slope = 0.65, beta_min = -29.28, u_c = 1,
+    # Life-history parameters 
+    L_0_Hall = 0.35, L_0 = 0.65, SAM = 1.50, maxage = 60,
+    # Environmental conditions
+    temp = 20,        # degree C
+    food_max = 0.5,   # Max food (mg/L)
+
+    # Density-dependent food ~ starvation proxy (simplification for course exercise)
+    Nhalf = 250,  # density at which available food halves ~ defined as the carrying capacity
+
+    # Copper exposure + calibrated TKTD (Copper_gekal_assim.txt / Table 4) 
+    Cw = 0,                       # external copper concentration (µg/L); 0 = clean control
+    kD = 0.01690427 * 24,         # damage rate
+    NEC = 12.35223,               # DEBtox no-effect concentration 
+    cT = 0.01143088,              # DEBtox stress slope/multiplier
+    zw = 38.23527,                # GUTS damage threshold (m_n)
+    bw = 4.28189e-4 * 24,         # GUTS killing rate
+    mortconst = 1.013762e-3 * 24  # starvation constant
+  ),
+
+  # Initial population: 6 brooding adults + 10 neonates
+  init = local({
+    set.seed(42)
+    adults   <- data.frame(age = 8, size = 2.2, eggs = 3, eggage = runif(6, 0, 3), Dw = 0)
+    neonates <- data.frame(age = 0, size = 0.65, eggs = 0, eggage = 0, Dw = 0)[rep(1, 10), ]
+    rbind(adults, neonates)
+  }),
+
+  times = c(from = 0, to = 75, by = 1),   # 75-day population experiment
+  solver = "myiteration",
+  equations = list()
+)
+```
+
+---
+
+# The equations: 
+
+```{r equations}
+equations(ibm_cu) <- list(
+
+  # new neonates: a Dw = 0 (born undamaged)
+  newdaphnia = function(SON, n) {
+    if (n > 0) data.frame(age = rep(0, n), size = SON, eggs = 0, eggage = 0, Dw = 0) else NULL
+  },
+
+  # egg development time 
+  bottrell = function(temp) exp(3.3956 + 0.2193 * log(temp) - 0.3414 * log(temp)^2),
+
+  # Temperature-Food interaction growth
+  # Note: the parameter maximum food is named `food_max`, NOT `food`. 
+  tefi = function(time, temp, food, parms) {
+    with(parms, {
+      deltaL <- L_0 - L_0_Hall
+      k <- b1 * exp(b2 * temp)
+      L_max <- (a1 * food) / (a2 + food) + a3 - k * a4
+      L <- L_max - (L_max - L_0_Hall) * exp(-k * time) + deltaL
+      E <- (X_max_slope * food) / (K_s_slope + food) * L + beta_min * (1 - exp(-u_c * food))
+      as.data.frame(cbind(L, E))
+    })
+  },
+
+  #1 LIVE — growth, egg production, copper damage uptake and DEBtox 
+  live = function(inds, parms) {
+    with(parms, {
+      N <- nrow(inds)
+
+      # Damage
+      inds$Dw <- inds$Dw + kD * (Cw - inds$Dw) * DELTAT
+      inds$Dw <- pmin(inds$Dw, Cw)                       
+
+      # Effective food = density-dependent supply 
+      food_dd  <- food_max / (1 + N / Nhalf)             # density-dependent food
+      s        <- cT * pmax(0, inds$Dw - NEC)            # DEBtox stress 
+      food_eff <- food_dd / (1 + s)                      # assimilation PMoA
+      
+      # Growth & reproduction 
+      inds$age    <- inds$age + DELTAT
+      inds$eggage <- ifelse(inds$size > SAM & inds$eggs > 0, inds$eggage + DELTAT, 0)
+      tefi_out    <- tefi(inds$age, temp, food_eff, parms)
+      inds$size   <- tefi_out$L
+      neweggs     <- round(tefi_out$E)
+      inds$eggs   <- ifelse(inds$size > SAM & inds$eggage == 0, pmax(0, neweggs), inds$eggs)
+      inds
+    })
+  },
+
+  #2 SURVIVE — GUTS lethal  + starvation proxy + maximum age
+  survive = function(inds, parms) {
+    with(parms, {
+      N <- nrow(inds)
+      if (N == 0) return(inds)
+
+      food_dd  <- food_max / (1 + N / Nhalf)
+      s        <- cT * pmax(0, inds$Dw - NEC)
+      food_eff <- food_dd / (1 + s)
+      e_scaled <- food_eff / food_max                   
+
+      # GUTS stochastic death (hazard from damage above threshold zw)
+      hz <- bw * pmax(0, inds$Dw - zw)
+      ps <- exp(-hz * DELTAT)                             
+
+      # Starvation proxy 
+      p_starv <- (1 - e_scaled) * mortconst * DELTAT
+
+      rnd_guts  <- runif(N)
+      rnd_starv <- runif(N)
+      
+      # Survival
+      subset(inds, rnd_guts < ps & rnd_starv > p_starv & inds$age < maxage)
+    })
+  },
+
+  #3 HATCH (newborns inherit Dw = 0 via newdaphnia)
+  hatch = function(inds, parms) {
+    with(parms, {
+      edt <- bottrell(temp)
+      have.neo <- which(inds$eggs > 0 & inds$eggage > edt)
+      eggs <- inds$eggs[have.neo]
+      new.neo <- sum(eggs)
+      inds$eggs[have.neo] <- inds$eggage[have.neo] <- 0
+      rbind(inds, newdaphnia(L_0, new.neo))
+    })
+  }
+)
+```
+
+---
+
+# The solver  {#solver}
+
+```{r solver}
+myiteration <- function(y, ...) {
+  observer <- function(res) {
+    c(number   = nrow(res),
+      meansize = mean(res$size),
+      meanage  = mean(res$age),
+      meaneggs = mean(res$eggs),
+      meanDw   = mean(res$Dw))          # (added) population-mean scaled damage
+  }
+  init <- y@init; times <- fromtoby(y@times); func <- y@main
+  parms <- y@parms; equations <- addtoenv(y@equations)
+  environment(func) <- environment()
+  parms$DELTAT <- 0
+  out <- observer(init)
+  for (i in 2:length(times)) {
+    parms$DELTAT <- times[i] - times[i - 1]
+    init <- func(times[i], init, parms)
+    out <- rbind(out, observer(init))
+  }
+  row.names(out) <- NULL
+  as.data.frame(cbind(times = times, out))
+}
+```
+
+---
+
+# Population scenarios {#run}
+
+```{r run-scenarios}
+
+run_rep <- function(model, Cw_value, seed) {
+  parms(model)["Cw"] <- Cw_value
+  set.seed(seed)
+  out(sim(model))$number
+}
+
+scenarios <- list(
+  "Control"     = 0,    # clean control
+  "50 ug Cu/L"  = 25,   # ~ measured dissolved Cu; above NEC but below the lethal threshold
+  "200 ug Cu/L" = 40    # ~ measured dissolved Cu; approaches the GUTS threshold -> lethal effects
+)
+
+n_rep <- 3                                      
+days  <- seq(0, 75, by = 1)                   
+
+envelopes <- lapply(scenarios, function(Cw) {
+  reps <- sapply(1:n_rep, function(r) run_rep(ibm_cu, Cw, seed = 100 + r))
+  data.frame(day = days,
+             lo  = apply(reps, 1, min),
+             hi  = apply(reps, 1, max),
+             mid = apply(reps, 1, median))
+})
+```
+
+```{r scenario-plot}
+cols <- c("Control" = "black", "50 ug Cu/L" = "blue", "200 ug Cu/L" = "red")
+par(mfrow = c(1, 2))
+ymax <- max(sapply(envelopes, function(e) max(e$hi)), 100)
+plot(NULL, xlim = c(0, 75), ylim = c(0, ymax),
+     xlab = "Time (days)", ylab = "Total abundance",
+     main = "Copper impacts on Daphnia")
+for (nm in names(envelopes)) {
+  e <- envelopes[[nm]]
+  polygon(c(e$day, rev(e$day)), c(e$lo, rev(e$hi)), col = adjustcolor(cols[nm], 0.2), border = NA)
+  lines(e$day, e$mid, col = cols[nm], lwd = 2)
+}
+legend("topleft", legend = names(scenarios), col = cols, lwd = 2, bty = "n")
+
+# same plot, log scale
+plot(NULL, xlim = c(0, 75), ylim = c(1, ymax), log = "y",
+     xlab = "Time (days)", ylab = "Total abundance (log)", main = "")
+for (nm in names(envelopes)) lines(envelopes[[nm]]$day, pmax(envelopes[[nm]]$mid, 1),
+                                   col = cols[nm], lwd = 2)
+```
+
+---
+
+# Validation
+
+```{r read-pop-data}
+pop <- read_excel("SI_population_data.xlsx")
+
+pop$Day                  <- suppressWarnings(as.numeric(pop$Day))
+pop$Nom_Cu_conc          <- suppressWarnings(as.numeric(pop$Nom_Cu_conc))
+pop$Nom_Zi_conc          <- suppressWarnings(as.numeric(pop$Nom_Zi_conc))
+pop$Average_no_organisms <- suppressWarnings(as.numeric(pop$Average_no_organisms))
+pop <- pop[!is.na(pop$Average_no_organisms), ]
+
+tot <- subset(pop, Type_of_organism == "Total" & Nom_Zi_conc == 0)
+obs <- aggregate(Average_no_organisms ~ Nom_Cu_conc + Day, data = tot, FUN = mean)
+nom2name <- c("0" = "Control", "50" = "50 ug Cu/L", "200" = "200 ug Cu/L") 
+```
+
+```{r validation plot}
+par(mfrow = c(1, 3))
+
+ymax_v <- max(c(obs$Average_no_organisms,
+                sapply(envelopes, function(e) max(e$hi))), na.rm = TRUE)
+for (nom in c(0, 50, 200)) {
+  nm <- nom2name[as.character(nom)]; e <- envelopes[[nm]]; o <- subset(obs, Nom_Cu_conc == nom)
+  plot(o$Day, o$Average_no_organisms, pch = 15, col = "darkblue",
+       xlim = c(0, 75), ylim = c(0, ymax_v), xlab = "Time (days)", ylab = "Total abundance",
+       main = paste0(nom, " ug/L"))
+  polygon(c(e$day, rev(e$day)), c(e$lo, rev(e$hi)), col = adjustcolor("grey40", 0.5), border = NA)
+  lines(e$day, e$mid, col = "black", lwd = 2)
+  points(o$Day, o$Average_no_organisms, pch = 15, col = "darkblue")   
+  legend("topright", legend = c("Observed", "Predicted"),
+         pch = c(15, NA), lwd = c(NA, 2), col = c("darkblue", "black"), bty = "n", cex = 0.9)
+}
+```
+
+```{r rsq}
+# log-abundance R2: compare log(observed) with log(predicted median)
+rsq_log <- function(nom) {
+  nm <- nom2name[[as.character(nom)]]
+  e  <- envelopes[[nm]]
+  o  <- obs[obs$Nom_Cu_conc == nom, c("Day", "Average_no_organisms")]
+  o  <- o[is.finite(o$Average_no_organisms) & o$Average_no_organisms > 0, ]
+  pred <- e$mid[match(o$Day, e$day)]           
+  keep <- is.finite(pred) & pred > 0
+  if (sum(keep) < 2) return(NA_real_)           
+  yo <- log(o$Average_no_organisms[keep]); yp <- log(pred[keep])
+  1 - sum((yo - yp)^2) / sum((yo - mean(yo))^2)
+}
+data.frame(Treatment = c("Control", "50 ug Cu/L", "200 ug Cu/L"),
+           R2_log = round(sapply(c(0, 50, 200), rsq_log), 2))
+```
+
+
+```{r damage-diagnostic}
+set.seed(7)
+dmg <- sapply(scenarios, function(Cw) { parms(ibm_cu)["Cw"] <- Cw
+out(sim(ibm_cu))$meanDw })
+matplot(days, dmg, type = "l", lty = 1, lwd = 2, col = cols,
+        xlab = "Time (days)", ylab = "Mean scaled damage Dw (µg/L)",
+        main = "Damage build-up vs effect thresholds", ylim = c(0, 45))
+abline(h = 12.35, lty = 3); text(62, 14, "NEC (sublethal)", cex = 0.8)
+abline(h = 38.24, lty = 2); text(62, 40, "zw (lethal)",     cex = 0.8)
+legend("bottomright", legend = names(scenarios), col = cols, lwd = 2, bty = "n")
+```
+
