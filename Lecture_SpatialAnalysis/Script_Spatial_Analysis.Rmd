@@ -1,0 +1,277 @@
+---
+title: "TheoEcotox_SpatialAnalysis"
+author: "Silviu Bobric"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Introduction
+
+Welcome to the Spatial Analysis exercise in M.Sc course "Theoretical Ecotoxicology: Concepts and Applications"! 
+
+*What is spatial data?* In a nutshell, it is data which somehow has some kind of information regarding its "location on the planet", be it e.g. the coordinates of a water monitoring station (VECTOR POINTS), the shape of an oil spill (VECTOR POLYGON) or pixels containing topographic information such as elevation (RASTER). 
+
+By using R and the multitudes of packages coming with it we are able to use state-of-the-art spatial processing. More importantly, we are able to write code chunks which are reproducible and understandable for people wanting to re-do and understand our analysis.
+
+## Goal of exercise
+
+This following exercise is basically a copy of Chapter 15 of the book "Geocomputation with R" (https://r.geocompx.org/). I strongly recommend the book if you want to get get a grasp of basic and advanced spatial analysis with R.
+
+By using the package spDataLarge, we are able to quickly load spatial datasets, such as the data used for this exercise. You will analyze the composition and spatial distribution of vascular plants on the southern slope of Mt. Mongón, a lomas mountain near Casma on the central northern coast of Peru. You can see your *Area Of Interest (AOI)* (https://r.geocompx.org/images/15_study_area_mongon.png) under this link or simply follow the code and figures in this chapter (https://r.geocompx.org/eco).
+
+The analysis-scheme (load data, do some descriptive/exploratory analysis, do some geo-modelling) can also be applied to other use cases, such as water quality data regarding environmental chemicals or ecotoxicological data.
+
+# Exercise
+## Load packages and data
+
+```{r, message = FALSE, Load packages}
+# Packages for general purposes
+library(tidyverse)   # For data manipulation and effective piping (dplyr)
+library(spDataLarge) # For loading spatial datasets
+
+# Packages for spatial data
+library(sf)          # For working with vector files
+library(terra)       # For working with raster files
+library(qgisprocess) # For using state-of-the-art geospatial processes in R
+
+# Packages for modelling
+library(vegan)      # For exploratory statistics
+library(mlr3)       # For statistical learning
+library(mlr3spatiotempcv) # mlr3 building block for statistical learning
+library(mlr3learners)     # mlr3 building block for statistical learning
+library(mlr3tuning)       # mlr3 building block for statistical learning
+library(mlr3spatial)      # mlr3 building block for statistical learning
+library(ranger)     # For random forest model
+
+# Package for mapping spatial data
+library(tmap)       # For drawing beautiful thematic maps
+```
+
+
+```{r Load data}
+data("study_area", "random_points", "comm", package = "spDataLarge")
+dem = rast(system.file("raster/dem.tif", package = "spDataLarge"))
+ndvi = rast(system.file("raster/ndvi.tif", package = "spDataLarge"))
+
+print(dem)
+
+plot(dem)
+plot(ndvi)
+```
+
+We loaded following data:
+
+- *study_area* is a vector file (polygon) representing the outline of AOI.
+- *random_points* is a vector file (points) representing 100 sites inside AOI.
+- *comm* is a matrix where the rows represent the visited sites in the AOI and the columns the observed species. The values represent species cover per site (4 by 4 sq. meter plot), and were recorded as the area covered by a species in proportion to the site area. The row names correspond to the id column of random_points.
+- *dem* is a raster file and represents the Digital Elevation Model ( DEM - https://en.wikipedia.org/wiki/Digital_elevation_model ) for the AOI.
+- *ndvi* is a raster file and represents the Normalized Difference Vegetation Index ( NDVI - https://en.wikipedia.org/wiki/Normalized_difference_vegetation_index ) computed from the red and near-infrared channels of a Landsat (satellite) scene.
+
+Lets visualize the data! In the figure below we can see our AOI, the response variable (vector files) and our predictors variables (raster files).
+
+```{r Area Of Interest}
+hs = terra::shade(terra::terrain(dem, v = "slope", unit = "radians"),
+                terra::terrain(dem, v = "aspect", unit = "radians"),
+                10, 200)
+
+tm = tm_shape(hs) +
+  tm_grid(n.x = 3, n.y = 3) +
+  tm_raster(col.scale = tm_scale_continuous(values = rev(hcl.colors(99, "Grays"))),
+            col.legend = tm_legend_hide()) +
+  tm_shape(dem) +
+  tm_raster(col_alpha = 0.5,
+            col.scale = tm_scale_continuous(n = 11, values = terrain.colors(50)),
+            col.legend = tm_legend(title = "elevation", reverse = TRUE)) +
+  tm_shape(study_area) +
+  tm_borders() +
+  tm_shape(random_points) +
+  tm_symbols(col = "black", size = 0.2)
+
+tm
+```
+
+## Load variables needed for explanatory and inferential statistics
+
+We load some predictors variables (catchment area & catchment slope) which can be calculated from the DEM. For the scope of this exercise, you only have to understand that we are theoretically able to compute state-of-the-art geocomputational processes in R using "R-GIS bridges" with the package "qgisprocess".
+
+- *catchment area* is the total upslope area that drains water downward into a specific point (pixel) on the map. Low values indicate drier areas (e.g., ridges, peaks), while high values indicate wetter areas (e.g., valleys, drainage channels).
+- *catchment slope* is the average slope of the entire upstream contributing area (the catchment) draining into that pixel. If the upstream catchment is incredibly steep, water will flow rapidly downhill, resulting in faster runoff, less infiltration, and potentially more soil erosion. If the upstream catchment is flatter, water moves slowly, allowing for more soil infiltration and moisture retention by the time it reaches the pixel.
+
+If you want to do the calculation for deducing the predictors from the DEM for yourself, look up the code chunks in Chapter 15 of the book. As a convenience to our course, the authors of the book added the spatial variables (slope & area) to spDataLarge. We load this data and extract the terrain attributes to our field observations.
+
+```{r Load predictors}
+ep = rast(system.file("raster/ep.tif", package = "spDataLarge"))
+
+print(ep)
+plot(ep)
+```
+
+## Explanatory statistics
+
+We want to extract the main information, frequently corresponding to *ecological gradients*, from a large species-plot. For our case, we will use NMDS (Non-metric MultiDimensional Scaling - https://uw.pressbooks.pub/appliedmultivariatestatistics/chapter/nmds/) to reduce dimensionality of our dataset. NMDS is a popular dimension-reducing technique used in ecology, because it explains non-linear relationships (e.g. species data along an environmental gradient such as humidity or temperature) better than more famous ordination techniques such as PCA.
+
+In a nutshell, NMDS takes the full species composition matrix and compresses it per site. Sites with similar plant communities get similar scores. Sites with very different plant communities get very different scores.
+
+By analogy, when conducting a study in which identical pollutants are measured in 100 different water bodies using the same technique, it might be useful to *group the water bodies based on similarities in pollutant clusters* and use this information to draw conclusions about unknown sites based on known ones.
+
+```{r Explanatory statistics}
+
+# Extraction of spatial information for our sites
+ep_rp = terra::extract(ep, random_points, ID = FALSE)
+random_points = cbind(random_points, ep_rp)
+
+# Categorizing our sites based on these spatial informations
+
+# presence-absence matrix
+pa = vegan::decostand(comm, "pa")  # 100 rows (sites), 69 columns (species)
+# keep only sites in which at least one species was found
+pa = pa[rowSums(pa) != 0, ]  # 84 rows, 69 columns
+
+set.seed(25072018)
+nmds = vegan::metaMDS(comm = pa, k = 4, try = 500)
+
+elev = dplyr::filter(random_points, id %in% rownames(pa)) |>
+  dplyr::pull(dem)
+# rotating NMDS in accordance with altitude (proxy for humidity)
+rotnmds = vegan::MDSrotate(nmds, elev)
+# extracting the first two axes
+sc = vegan::scores(rotnmds, choices = 1:2, display = "sites")
+# plotting the first axis against altitude
+plot(y = sc[, 1], x = elev, xlab = "Important explanatory variable (elevation in m)",
+     ylab = "Floristic gradient (first NMDS axis)", cex.lab = 0.8, cex.axis = 0.8)
+
+# k-means clustering with 3 groups
+clusters = kmeans(sc[, 1], centers = 3)$cluster
+
+# Plot with cluster colors
+plot(y = sc[, 1],
+     x = elev,
+     col = clusters,
+     pch = 16,
+     xlab = "Important explanatory variable (elevation in m)",
+     ylab = "Floristic gradient (first NMDS axis)",
+     cex.lab = 0.8,
+     cex.axis = 0.8)
+
+sc
+```
+
+Dont worry about the coding and the way of doing stuff. Most importantly is that you understand that:
+
+- we *extracted* some spatial information of our sites (response) based on our geographical data (predictions) in our study area by using geometric operations,
+- and then used this spatial information to see if we can *explain* our sites based on it through explanatory statistics.
+
+We can now model the vegetation community at each location (pixel) using the NMDS scores as proxy for floristic gradients! Once the model is trained, it can be applied to every pixel in the study area, because the predictor rasters (DEM, NDVI, Catchment area, Catchment slope) covers the entire landscape. 
+
+## Inferential statistics
+
+To predict the floristic gradient spatially, we use a random forest model using modelling building blocks from the mlr3 package. Please note that there are different packages that can be used for statistical learning, so there are many ways leading to the same results.
+
+We will not get into the nitty-griddy of random forest models and mlr3 building blocks because it goes beyond the scope of this lecture/exercise. Please read Chapter 15 of the book if you are interested in that.
+
+```{r Construct response-predictor matrix}
+# id- and response variable
+rp = data.frame(id = as.numeric(rownames(sc)), sc = sc[, 1])
+# join the predictors (dem, ndvi and terrain attributes)
+rp = inner_join(random_points, rp, by = "id")
+
+# create task
+task = mlr3spatiotempcv::as_task_regr_st(
+  select(rp, -id, -spri),
+  target = "sc",
+  id = "mongon")
+
+# construct RF learner from the ranger package
+lrn_rf = lrn("regr.ranger", predict_type = "response")
+
+# specifying the search space
+search_space = paradox::ps(
+  mtry = paradox::p_int(lower = 1, upper = ncol(task$data()) - 1),
+  sample.fraction = paradox::p_dbl(lower = 0.2, upper = 0.9),
+  min.node.size = paradox::p_int(lower = 1, upper = 10))
+
+autotuner_rf = mlr3tuning::auto_tuner(
+  learner = lrn_rf,
+  resampling = mlr3::rsmp("spcv_coords", folds = 5), # spatial partitioning
+  measure = mlr3::msr("regr.rmse"), # performance measure
+  terminator = mlr3tuning::trm("evals", n_evals = 50), # specify 50 iterations
+  search_space = search_space, # predefined hyperparameter search space
+  tuner = mlr3tuning::tnr("random_search") # specify random search
+)
+
+autotuner_rf = mlr3tuning::auto_tuner(
+  learner = lrn_rf,
+  resampling = mlr3::rsmp("spcv_coords", folds = 5), # spatial partitioning
+  measure = mlr3::msr("regr.rmse"), # performance measure
+  terminator = mlr3tuning::trm("evals", n_evals = 50), # specify 50 iterations
+  search_space = search_space, # predefined hyperparameter search space
+  tuner = mlr3tuning::tnr("random_search") # specify random search
+)
+
+# hyperparameter tuning
+set.seed(19012026)
+autotuner_rf$train(task)
+
+autotuner_rf$tuning_result
+```
+
+Congratulations! You just created a model with one code chunk, which you can use to apply to your spatial map!
+
+```{r Predictive mapping of the floristic gradient revealing distinct vegetation belts}
+
+# predicting using the best hyperparameter combination
+autotuner_rf$predict(task)
+
+pred = mlr3spatial::predict_spatial(newdata = ep, learner = autotuner_rf)
+
+
+hs = terra::shade(terra::terrain(dem, v = "slope", unit = "radians"),
+                  terra::terrain(dem, v = "aspect", unit = "radians"),
+                  10, 200) |>
+  terra::mask(terra::vect(study_area))
+pred = terra::mask(pred, terra::vect(study_area)) |>
+  terra::trim()
+
+pal = rev(hcl.colors(n = 15, "RdYlBu"))
+
+tm = tm_shape(hs) +
+  tm_grid(n.x = 3, n.y = 3, lines = FALSE) +
+  tm_raster(col.scale = tm_scale_continuous(values = rev(hcl.colors(99, "Grays"))),
+            col.legend = tm_legend_hide()) +
+  tm_shape(pred, is.main = TRUE) +
+  tm_raster(col.scale = tm_scale_continuous(values = pal, midpoint = NA),
+            col.legend = tm_legend(title = "NMDS1", reverse = TRUE),
+            col_alpha = 0.8) +
+  tm_shape(study_area) +
+  tm_borders()
+
+tm
+```
+
+What can you see? You now did a predictive map of the floristic gradient. This shows, based on the predictors (geographic data) you used for training, a clear distinction of vegetation belts in your Area Of Interest.
+
+Please refer to Muenchow, Hauenstein, et al. (https://www.cambridge.org/core/journals/journal-of-tropical-ecology/article/soil-texture-and-altitude-respectively-largely-determine-the-floristic-gradient-of-the-most-diverse-fog-oasis-in-the-peruvian-desert/9E6BED9CA86AD0059C1F3CB3AD8094A9) for a detailed description of vegetation belts on lomas mountains. 
+
+The *blue color tones* represent the so-called Tillandsia belt. Tillandsia is a highly adapted genus especially found in high quantities at the sandy and quite desertic foot of lomas mountains. The *yellow color tones* refer to a herbaceous vegetation belt with a much higher plant cover compared to the Tillandsia belt. The *orange colors* represent the bromeliad belt, which features the highest species richness and plant cover. It can be found directly beneath the temperature inversion (ca. 750-850 m asl) where humidity due to fog is highest. Water availability naturally decreases above the temperature inversion, and the landscape becomes desertic again with only a few succulent species (succulent belt; red colors).
+
+# Exercise questions
+
+Hint: the answer to the questions are either in the lecture or in this script :-).
+
+*GENERAL*
+What is the difference between geographic and non-geographic data?
+Which geographic data types do you know? What are their characteristics?
+What does the abbreviation GIS stand for?
+What three important R-packages are there for loading, working with and modelling different geographic data types in R?
+
+*EXERCISE*
+At the beginning of the exercise you loaded "ndvi" into R.
+- What kind of geographical data type (vector/raster) is "ndvi"?
+- What is the Coordinate Reference System (CRS) of "ndvi"?
+- What unit is the extent and resolution of "ndvi"? (Hint: look into the CRS of "ndvi" per Ecosia/Bing/Google...)
+- What does "size" mean in context of the geographical data type of "ndvi"? 
+- Last but not least: how big is the area shown in "ndvi"? 
+
+(Hint for the last question: if you made it this far, you will know that "ndvi" is a raster. If you know that the file is a raster, you know it is made out of pixels and also how many pixels there are horizontally and vertically, and how big the pixels are. So, just use basic maths to calculate the area of a pixel and sum that up for all pixels in your file!)
+
+
